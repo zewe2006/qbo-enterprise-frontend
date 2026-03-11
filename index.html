@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QBO Enterprise — Consolidated Dashboard</title>
+<link rel="stylesheet" href="./base.css">
+<link rel="stylesheet" href="./style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- ============ LOGIN PAGE ============ -->
+<div id="login-page" class="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <rect width="36" height="36" rx="8" fill="#01696f"/>
+        <path d="M8 12h8v4H8zM8 20h8v4H8zM20 8h8v4h-8zM20 16h8v4h-8zM20 24h8v4h-8z" fill="#fff" opacity="0.9"/>
+        <path d="M16 14l4 4M16 22l4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="login-logo-text">QBO Enterprise</span>
+    </div>
+    <div id="login-error" class="login-error"></div>
+    <div id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="login-email">Email</label>
+        <input class="form-input" type="email" id="login-email" placeholder="admin@enterprise.local" value="admin@enterprise.local">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="login-password">Password</label>
+        <input class="form-input" type="password" id="login-password" placeholder="Password" value="admin123">
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:var(--space-2);" onclick="doLogin()">
+        Sign In
+      </button>
+      <p class="text-center text-muted mt-4" style="font-size:var(--text-xs);">
+        Default: admin@enterprise.local / admin123
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app-shell" class="app hidden">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <svg width="28" height="28" viewBox="0 0 36 36" fill="none">
+        <rect width="36" height="36" rx="8" fill="#01696f"/>
+        <path d="M8 12h8v4H8zM8 20h8v4H8zM20 8h8v4h-8zM20 16h8v4h-8zM20 24h8v4h-8z" fill="#fff" opacity="0.9"/>
+        <path d="M16 14l4 4M16 22l4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="sidebar-brand-text">QBO Enterprise</div>
+        <div class="sidebar-brand-sub">Consolidated Dashboard</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Overview</div>
+      <ul class="sidebar-nav">
+        <li><a href="#dashboard" data-page="dashboard" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span>Dashboard</span>
+        </a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Reports</div>
+      <ul class="sidebar-nav">
+        <li><a href="#profit-loss" data-page="profit-loss">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+          <span>Profit & Loss</span>
+        </a></li>
+        <li><a href="#balance-sheet" data-page="balance-sheet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="8" cy="7" r="1" fill="currentColor"/><circle cx="8" cy="12" r="1" fill="currentColor"/><circle cx="8" cy="17" r="1" fill="currentColor"/></svg>
+          <span>Balance Sheet</span>
+        </a></li>
+        <li><a href="#cash-flow" data-page="cash-flow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><path d="M7 7l5-5 5 5M17 17l-5 5-5-5"/></svg>
+          <span>Cash Flow</span>
+        </a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Intercompany</div>
+      <ul class="sidebar-nav">
+        <li><a href="#intercompany" data-page="intercompany">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M8 21H3v-5M20 4L3 21"/></svg>
+          <span>Journal Entries</span>
+        </a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Settings</div>
+      <ul class="sidebar-nav">
+        <li><a href="#companies" data-page="companies">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M7 7V3h10v4M7 11h2M7 15h2M15 11h2M15 15h2M11 21v-4h2v4"/></svg>
+          <span>Companies</span>
+        </a></li>
+        <li><a href="#account-mapping" data-page="account-mapping">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="5" cy="18" r="3"/><circle cx="19" cy="18" r="3"/><path d="M8 6h8M8 18h8M5 9v6M19 9v6"/></svg>
+          <span>Account Mapping</span>
+        </a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-section">
+      <ul class="sidebar-nav">
+        <li><button onclick="toggleTheme()" data-theme-toggle aria-label="Toggle theme">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <span>Toggle Theme</span>
+        </button></li>
+        <li><button onclick="doLogout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          <span>Sign Out</span>
+        </button></li>
+      </ul>
+    </div>
+
+    <div class="app-footer">
+      <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">
+        Created with Perplexity Computer
+      </a>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <header class="header">
+    <h1 class="header-title" id="page-title">Dashboard</h1>
+    <div class="header-actions">
+      <span id="user-display" class="text-muted" style="font-size:var(--text-xs);"></span>
+      <span id="company-badge" class="badge badge-success" style="display:none;"></span>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="main" id="main-content">
+
+    <!-- ======== DASHBOARD PAGE ======== -->
+    <section id="page-dashboard" class="page-content active">
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">Revenue (MTD)</div><div class="kpi-value" id="kpi-revenue">--</div><div class="kpi-delta neutral" id="kpi-revenue-delta">Loading...</div></div>
+        <div class="kpi-card"><div class="kpi-label">Expenses (MTD)</div><div class="kpi-value" id="kpi-expenses">--</div><div class="kpi-delta neutral" id="kpi-expenses-delta">Loading...</div></div>
+        <div class="kpi-card"><div class="kpi-label">Net Income (MTD)</div><div class="kpi-value" id="kpi-net-income">--</div><div class="kpi-delta neutral" id="kpi-net-delta">Loading...</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Assets</div><div class="kpi-value" id="kpi-assets">--</div><div class="kpi-delta neutral" id="kpi-assets-delta">&nbsp;</div></div>
+        <div class="kpi-card"><div class="kpi-label">Connected Companies</div><div class="kpi-value" id="kpi-companies">1</div><div class="kpi-delta neutral">of 14 total</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Revenue Trend</span></div>
+          <div class="chart-container"><canvas id="chart-revenue"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Expense Breakdown</span></div>
+          <div class="chart-container"><canvas id="chart-expenses"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card mt-6">
+        <div class="card-header">
+          <span class="card-title">Recent Activity</span>
+        </div>
+        <div id="recent-activity" class="text-muted" style="font-size:var(--text-sm);padding:var(--space-4);">
+          Connect and sync your QBO companies to see activity here.
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== PROFIT & LOSS PAGE ======== -->
+    <section id="page-profit-loss" class="page-content">
+      <div class="filter-bar">
+        <div class="filter-group filter-group-company">
+          <label>Company</label>
+          <div class="multi-company-select" id="pl-company-wrap">
+            <button type="button" class="multi-select-btn" onclick="toggleMultiSelect('pl')" id="pl-company-btn">All Companies</button>
+            <div class="multi-select-dropdown hidden" id="pl-company-dropdown">
+              <label class="multi-opt"><input type="checkbox" value="all" checked onchange="handleAllToggle('pl', this)"> <span>All Companies (Consolidated)</span></label>
+              <div id="pl-company-options"></div>
+            </div>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>Start Date</label>
+          <input type="date" id="pl-start-date">
+        </div>
+        <div class="filter-group">
+          <label>End Date</label>
+          <input type="date" id="pl-end-date">
+        </div>
+        <div class="filter-group">
+          <label>Quick Range</label>
+          <select id="pl-date-macro" onchange="applyDateMacro('pl')">
+            <option value="">Custom</option>
+            <option value="This Month" selected>This Month</option>
+            <option value="Last Month">Last Month</option>
+            <option value="This Month-to-date">Month to Date</option>
+            <option value="This Fiscal Quarter">This Quarter</option>
+            <option value="Last Fiscal Quarter">Last Quarter</option>
+            <option value="This Fiscal Quarter-to-date">Quarter to Date</option>
+            <option value="This Fiscal Year">This Year</option>
+            <option value="Last Fiscal Year">Last Year</option>
+            <option value="This Fiscal Year-to-date">Year to Date</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Method</label>
+          <select id="pl-method">
+            <option value="Accrual">Accrual</option>
+            <option value="Cash">Cash</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Compare</label>
+          <select id="pl-compare">
+            <option value="">No Comparison</option>
+            <option value="prior_year">vs. Prior Year</option>
+            <option value="prior_month">vs. Prior Month</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadPL()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Run Report
+        </button>
+        <button class="btn btn-secondary" onclick="exportReport('pl')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="card">
+        <div id="pl-loading" class="text-center text-muted" style="padding:var(--space-8);">
+          Select a company and date range, then click "Run Report"
+        </div>
+        <div id="pl-table-wrapper" class="hidden" style="overflow-x:auto;"></div>
+      </div>
+    </section>
+
+    <!-- ======== BALANCE SHEET PAGE ======== -->
+    <section id="page-balance-sheet" class="page-content">
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label>Company</label>
+          <div class="multi-company-select" id="bs-company-wrap">
+            <button type="button" class="multi-select-btn" onclick="toggleMultiSelect('bs')" id="bs-company-btn">All Companies</button>
+            <div class="multi-select-dropdown hidden" id="bs-company-dropdown">
+              <label class="multi-opt"><input type="checkbox" value="all" checked onchange="handleAllToggle('bs', this)"> <span>All Companies (Consolidated)</span></label>
+              <div id="bs-company-options"></div>
+            </div>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>As of Date</label>
+          <input type="date" id="bs-end-date">
+        </div>
+        <div class="filter-group">
+          <label>Quick Range</label>
+          <select id="bs-date-macro" onchange="applyDateMacro('bs')">
+            <option value="">Custom</option>
+            <option value="Today" selected>Today</option>
+            <option value="Last Month">End of Last Month</option>
+            <option value="Last Fiscal Quarter">End of Last Quarter</option>
+            <option value="Last Fiscal Year">End of Last Year</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Method</label>
+          <select id="bs-method">
+            <option value="Accrual">Accrual</option>
+            <option value="Cash">Cash</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Compare</label>
+          <select id="bs-compare">
+            <option value="">No Comparison</option>
+            <option value="prior_year">vs. Prior Year</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadBS()">Run Report</button>
+        <button class="btn btn-secondary" onclick="exportReport('bs')">Export CSV</button>
+      </div>
+      <div class="card">
+        <div id="bs-loading" class="text-center text-muted" style="padding:var(--space-8);">
+          Select a company and date, then click "Run Report"
+        </div>
+        <div id="bs-table-wrapper" class="hidden" style="overflow-x:auto;"></div>
+      </div>
+    </section>
+
+    <!-- ======== CASH FLOW PAGE ======== -->
+    <section id="page-cash-flow" class="page-content">
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label>Company</label>
+          <div class="multi-company-select" id="cf-company-wrap">
+            <button type="button" class="multi-select-btn" onclick="toggleMultiSelect('cf')" id="cf-company-btn">All Companies</button>
+            <div class="multi-select-dropdown hidden" id="cf-company-dropdown">
+              <label class="multi-opt"><input type="checkbox" value="all" checked onchange="handleAllToggle('cf', this)"> <span>All Companies (Consolidated)</span></label>
+              <div id="cf-company-options"></div>
+            </div>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>Start Date</label>
+          <input type="date" id="cf-start-date">
+        </div>
+        <div class="filter-group">
+          <label>End Date</label>
+          <input type="date" id="cf-end-date">
+        </div>
+        <div class="filter-group">
+          <label>Quick Range</label>
+          <select id="cf-date-macro" onchange="applyDateMacro('cf')">
+            <option value="">Custom</option>
+            <option value="This Month" selected>This Month</option>
+            <option value="Last Month">Last Month</option>
+            <option value="This Fiscal Quarter">This Quarter</option>
+            <option value="This Fiscal Year">This Year</option>
+            <option value="This Fiscal Year-to-date">Year to Date</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Compare</label>
+          <select id="cf-compare">
+            <option value="">No Comparison</option>
+            <option value="prior_year">vs. Prior Year</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadCF()">Run Report</button>
+        <button class="btn btn-secondary" onclick="exportReport('cf')">Export CSV</button>
+      </div>
+      <div class="card">
+        <div id="cf-loading" class="text-center text-muted" style="padding:var(--space-8);">
+          Select a company and date range, then click "Run Report"
+        </div>
+        <div id="cf-table-wrapper" class="hidden" style="overflow-x:auto;"></div>
+      </div>
+    </section>
+
+    <!-- ======== INTERCOMPANY PAGE ======== -->
+    <section id="page-intercompany" class="page-content">
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('ic', 'new')">New Entry</button>
+        <button class="tab-btn" onclick="switchTab('ic', 'history')">History</button>
+        <button class="tab-btn" onclick="switchTab('ic', 'templates')">Templates</button>
+      </div>
+
+      <div id="ic-tab-new" class="tab-content active">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Create Intercompany Journal Entry</span></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Source Company</label>
+              <select class="form-select" id="ic-source-company" onchange="loadICAccountsFor('source')"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Destination Company</label>
+              <select class="form-select" id="ic-dest-company" onchange="loadICAccountsFor('dest')"></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Entry Type</label>
+              <select class="form-select" id="ic-type">
+                <option value="fund_transfer">Fund Transfer</option>
+                <option value="expense_allocation">Expense Allocation</option>
+                <option value="revenue_sharing">Revenue Sharing</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input class="form-input" type="date" id="ic-date">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Amount</label>
+              <input class="form-input" type="number" id="ic-amount" step="0.01" placeholder="0.00">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <input class="form-input" type="text" id="ic-description" placeholder="e.g., Rent allocation for March 2026">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Source — Debit Account</label>
+              <select class="form-select" id="ic-src-debit" onchange="onAccountChange('source','debit')"><option value="">— Select source company first —</option></select>
+              <select class="form-select hidden" id="ic-src-debit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Source — Credit Account</label>
+              <select class="form-select" id="ic-src-credit" onchange="onAccountChange('source','credit')"><option value="">— Select source company first —</option></select>
+              <select class="form-select hidden" id="ic-src-credit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Dest — Debit Account</label>
+              <select class="form-select" id="ic-dest-debit" onchange="onAccountChange('dest','debit')"><option value="">— Select dest company first —</option></select>
+              <select class="form-select hidden" id="ic-dest-debit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Dest — Credit Account</label>
+              <select class="form-select" id="ic-dest-credit" onchange="onAccountChange('dest','credit')"><option value="">— Select dest company first —</option></select>
+              <select class="form-select hidden" id="ic-dest-credit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+            </div>
+          </div>
+          <div style="margin-top:var(--space-4);display:flex;gap:var(--space-3);">
+            <button class="btn btn-primary" onclick="createICEntry()">Create Entry</button>
+            <button class="btn btn-secondary" onclick="saveAsTemplate()">Save as Template</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="ic-tab-history" class="tab-content">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Entry History</span></div>
+          <div id="ic-history-table" style="overflow-x:auto;"></div>
+        </div>
+      </div>
+
+      <div id="ic-tab-templates" class="tab-content">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Saved Templates</span></div>
+          <div id="ic-templates-list" class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">
+            No templates saved yet. Create an intercompany entry and click "Save as Template".
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== COMPANIES PAGE ======== -->
+    <section id="page-companies" class="page-content">
+
+      <!-- Connect New Company Wizard -->
+      <div class="card mb-6 connect-wizard-card">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="card-title">Connect a QBO Company</span>
+          <span id="wizard-company-count" class="badge badge-neutral" style="font-size:var(--text-xs);"></span>
+        </div>
+        <div style="padding:0 var(--space-1);">
+
+          <!-- Wizard Steps Indicator -->
+          <div class="wizard-steps">
+            <div class="wizard-step active" data-step="1">
+              <div class="wizard-step-num">1</div>
+              <div class="wizard-step-label">Authenticate</div>
+            </div>
+            <div class="wizard-step-line"></div>
+            <div class="wizard-step" data-step="2">
+              <div class="wizard-step-num">2</div>
+              <div class="wizard-step-label">Select Company</div>
+            </div>
+            <div class="wizard-step-line"></div>
+            <div class="wizard-step" data-step="3">
+              <div class="wizard-step-num">3</div>
+              <div class="wizard-step-label">Sync Data</div>
+            </div>
+          </div>
+
+          <!-- Step 1: Start Connection -->
+          <div id="wizard-step-1" class="wizard-panel active">
+            <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:var(--space-4);">
+              Click the button below to sign in to QuickBooks. You'll be redirected to Intuit where you can 
+              choose which company to connect. A new window will open.
+            </p>
+            <button id="connect-btn" class="btn btn-primary" onclick="startQBOConnect()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+              Connect QuickBooks Company
+            </button>
+            <div id="connect-status" style="display:none;margin-top:var(--space-3);font-size:var(--text-sm);"></div>
+          </div>
+
+          <!-- Step 2: Waiting for OAuth -->
+          <div id="wizard-step-2" class="wizard-panel">
+            <div style="background:var(--color-bg-elevated);border-radius:var(--radius-md);padding:var(--space-4);margin-bottom:var(--space-4);border:1px solid var(--color-border);">
+              <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);">
+                <div class="loading-spinner" style="width:20px;height:20px;border-width:2px;"></div>
+                <strong style="font-size:var(--text-sm);">Waiting for QuickBooks authentication...</strong>
+              </div>
+              <p style="font-size:var(--text-xs);color:var(--color-text-secondary);margin:0;">
+                A popup window should have opened. Sign in to your Intuit account and select the company 
+                you want to add. Once you authorize, this page will automatically detect the connection and begin syncing.
+              </p>
+            </div>
+            <div style="display:flex;gap:var(--space-3);">
+              <button class="btn btn-secondary" onclick="openAuthWindow()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                Re-open Auth Window
+              </button>
+              <button class="btn btn-ghost" onclick="resetWizard()">
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 3: Syncing -->
+          <div id="wizard-step-3" class="wizard-panel">
+            <div id="sync-progress" style="margin-bottom:var(--space-4);">
+              <div style="display:flex;align-items:center;gap:var(--space-3);">
+                <div class="loading-spinner" style="width:20px;height:20px;border-width:2px;"></div>
+                <strong style="font-size:var(--text-sm);">Syncing company data...</strong>
+              </div>
+              <p id="sync-detail" style="font-size:var(--text-xs);color:var(--color-text-secondary);margin-top:var(--space-2);">Pulling P&L, Balance Sheet, Cash Flow, and Chart of Accounts...</p>
+            </div>
+            <div id="sync-result" style="display:none;"></div>
+            <div id="sync-actions" style="display:none;margin-top:var(--space-3);">
+              <button class="btn btn-primary" onclick="resetWizard()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Add Another Company
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- All Companies -->
+      <div class="card">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="card-title">All Connected Companies</span>
+        </div>
+        <p class="text-muted mb-4" style="font-size:var(--text-sm);">
+          Each company has its own OAuth connection and tokens. Use the Sync button to refresh a company's data.
+          All companies stay connected simultaneously.
+        </p>
+        <div id="companies-list" style="overflow-x:auto;"></div>
+      </div>
+    </section>
+
+    <!-- ======== ACCOUNT MAPPING PAGE ======== -->
+    <section id="page-account-mapping" class="page-content">
+      <div class="card mb-6">
+        <div class="card-header">
+          <span class="card-title">Account Mapping for Consolidation</span>
+        </div>
+        <p class="text-muted mb-4" style="font-size:var(--text-sm);">
+          Map each company's accounts to unified consolidation categories. 
+          Since your Charts of Accounts vary across companies, this mapping ensures 
+          the consolidated reports align correctly.
+        </p>
+        <div class="filter-bar" style="padding:0;">
+          <div class="filter-group">
+            <label>Company</label>
+            <select id="mapping-company-filter" class="company-selector"></select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="loadQBOAccounts()">Load Accounts</button>
+        </div>
+      </div>
+
+      <div class="card mb-6">
+        <div class="card-header"><span class="card-title">Accounts</span></div>
+        <div id="qbo-accounts-list" class="text-muted" style="font-size:var(--text-sm);padding:var(--space-2);">
+          Select a company and click "Load Accounts" to see its Chart of Accounts.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Saved Mappings</span></div>
+        <div id="account-mappings-list" style="overflow-x:auto;"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ======== MODAL: Company Accounts ======== -->
+<div id="company-accounts-modal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="company-accounts-title">Chart of Accounts</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('company-accounts-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div id="company-accounts-body" class="modal-body" style="max-height:70vh;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script src="./app.js"></script>
+</body>
+</html>
