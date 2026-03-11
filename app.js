@@ -145,8 +145,8 @@ function populateCompanySelectors() {
     let html = "";
     if (hasAll) html += '<option value="all">All Companies (Consolidated)</option>';
     for (const c of allCompanies) {
-      const tag = c.status === "connected" ? " \u2022 Connected" : "";
-      html += `<option value="${c.id}">${c.name}${tag}</option>`;
+      const dot = c.status === "connected" ? " \u2022" : "";
+      html += `<option value="${c.id}">${c.name}${dot}</option>`;
     }
     sel.innerHTML = html;
     if (current) sel.value = current;
@@ -156,10 +156,10 @@ function populateCompanySelectors() {
   ["pl", "bs", "cf", "dash"].forEach((prefix) => {
     const optionsDiv = document.getElementById(`${prefix}-company-options`);
     if (!optionsDiv) return;
-    let html = "";
+    let html = '<div class="multi-opt-divider"></div>';
     for (const c of allCompanies) {
-      const tag = c.status === "connected" ? " \u2022 Connected" : "";
-      html += `<label class="multi-opt"><input type="checkbox" value="${c.id}" onchange="handleCompanyCheck('${prefix}')" checked> <span>${c.name}${tag}</span></label>`;
+      const dotClass = c.status === "connected" ? "connected" : "disconnected";
+      html += `<label class="multi-opt"><input type="checkbox" value="${c.id}" onchange="handleCompanyCheck('${prefix}')" checked> <span><i class="status-dot ${dotClass}"></i>${c.name}</span></label>`;
     }
     optionsDiv.innerHTML = html;
     updateMultiSelectLabel(prefix);
