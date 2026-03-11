@@ -92,6 +92,19 @@ async function apiPost(path, body) {
   return res.json();
 }
 
+async function apiPut(path, body) {
+  const res = await fetch(`${API}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `API Error: ${res.status}`);
+  }
+  return res.json();
+}
+
 async function apiDelete(path) {
   const res = await fetch(`${API}${path}`, {
     method: "DELETE",
@@ -842,9 +855,10 @@ async function loadICHistory() {
     for (const e of entries) {
       const b = e.status === "posted" ? "badge-success" : e.status === "pending" ? "badge-warning" : e.status === "partial" ? "badge-warning" : "badge-neutral";
       const copyBtn = `<button class="btn btn-sm btn-secondary" onclick="copyICEntry('${e.id}')" title="Copy to new entry">Copy</button>`;
+      const editBtn = `<button class="btn btn-sm btn-secondary" onclick="editICEntry('${e.id}')" title="Edit entry">Edit</button>`;
       let actions = '';
       if (e.status === "pending" || e.status === "partial") {
-        actions = `<button class="btn btn-sm btn-primary" onclick="postICEntry('${e.id}')">Post</button> ${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
+        actions = `<button class="btn btn-sm btn-primary" onclick="postICEntry('${e.id}')">Post</button> ${editBtn} ${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
       } else {
         actions = `${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
       }
@@ -936,28 +950,29 @@ async function deleteICEntry(entryId) {
 }
 
 // =====================================================================
-//  MULTI-LINE IC ENTRY FORM
+//  QBO-STYLE MULTI-LINE IC ENTRY FORM
 // =====================================================================
 let icLineCounter = 0;
 
 function addICLine(side, preset) {
-  const container = document.getElementById(`ic-${side}-lines`);
+  const tbody = document.getElementById(`ic-${side}-lines`);
   const idx = icLineCounter++;
-  const row = document.createElement("div");
-  row.className = "ic-line-row";
-  row.dataset.side = side;
-  row.dataset.idx = idx;
+  const lineNum = tbody.querySelectorAll("tr").length + 1;
+  const tr = document.createElement("tr");
+  tr.dataset.side = side;
+  tr.dataset.idx = idx;
 
-  const accountsHtml = icAccountsCache[side === "source" ? document.getElementById("ic-source-company").value : document.getElementById("ic-dest-company").value]
-    ? buildAccountOptions(icAccountsCache[side === "source" ? document.getElementById("ic-source-company").value : document.getElementById("ic-dest-company").value])
+  const companyId = document.getElementById(side === "source" ? "ic-source-company" : "ic-dest-company").value;
+  const accountsHtml = icAccountsCache[companyId]
+    ? buildAccountOptions(icAccountsCache[companyId])
     : '<option value="">\u2014 Select company first \u2014</option>';
 
-  row.innerHTML = `
-    <select class="form-select" data-field="posting_type" onchange="updateICBalance('${side}')">
-      <option value="Debit"${preset?.posting_type === "Credit" ? "" : " selected"}>Debit</option>
-      <option value="Credit"${preset?.posting_type === "Credit" ? " selected" : ""}>Credit</option>
-    </select>
-    <div>
+  const presetDebit = preset?.posting_type === "Debit" ? preset.amount || "" : "";
+  const presetCredit = preset?.posting_type === "Credit" ? preset.amount || "" : "";
+
+  tr.innerHTML = `
+    <td class="ic-je-col-num">${lineNum}</td>
+    <td class="ic-je-col-account">
       <select class="form-select" data-field="account_name" onchange="onLineAccountChange(this, '${side}', ${idx})">
         <option value="">\u2014 Select Account \u2014</option>
         ${accountsHtml}
@@ -965,65 +980,94 @@ function addICLine(side, preset) {
       <select class="form-select ic-line-entity hidden" data-field="entity_id" data-idx="${idx}">
         <option value="">\u2014 Select Customer/Vendor \u2014</option>
       </select>
-    </div>
-    <input class="form-input" type="number" step="0.01" placeholder="0.00" data-field="amount" oninput="updateICBalance('${side}')" value="${preset?.amount || ''}">
-    <input class="form-input" type="text" placeholder="Line memo (optional)" data-field="description" value="${preset?.description || ''}">
-    <button class="ic-line-remove" onclick="removeICLine(this, '${side}')" title="Remove line">&times;</button>
+    </td>
+    <td class="ic-je-col-amount">
+      <input class="form-input" type="number" step="0.01" placeholder="" data-field="debit" oninput="onJEAmountInput(this,'debit','${side}')" value="${presetDebit}">
+    </td>
+    <td class="ic-je-col-amount">
+      <input class="form-input" type="number" step="0.01" placeholder="" data-field="credit" oninput="onJEAmountInput(this,'credit','${side}')" value="${presetCredit}">
+    </td>
+    <td class="ic-je-col-desc">
+      <input class="form-input" type="text" placeholder="" data-field="description" value="${preset?.description || ''}">
+    </td>
+    <td class="ic-je-col-action">
+      <button class="ic-je-line-remove" onclick="removeICLine(this, '${side}')" title="Remove line">&times;</button>
+    </td>
   `;
-  container.appendChild(row);
+  tbody.appendChild(tr);
 
-  // If preset has account_name, set it after a tick (accounts may need to load)
   if (preset?.account_name) {
     setTimeout(() => {
-      const acctSel = row.querySelector('[data-field="account_name"]');
+      const acctSel = tr.querySelector('[data-field="account_name"]');
       if (acctSel) acctSel.value = preset.account_name;
     }, 100);
   }
 
   updateICBalance(side);
-  return row;
+  return tr;
 }
 
-function removeICLine(btn, side) {
-  btn.closest(".ic-line-row").remove();
+function onJEAmountInput(input, field, side) {
+  // If user types in debit, clear credit (and vice versa) — like QBO
+  const tr = input.closest("tr");
+  const other = field === "debit" ? "credit" : "debit";
+  const otherInput = tr.querySelector(`[data-field="${other}"]`);
+  if (input.value && otherInput.value) {
+    otherInput.value = "";
+  }
   updateICBalance(side);
 }
 
-function updateICBalance(side) {
-  const container = document.getElementById(`ic-${side}-lines`);
-  const rows = container.querySelectorAll(".ic-line-row");
-  let totalDebit = 0, totalCredit = 0;
-  rows.forEach((row) => {
-    const type = row.querySelector('[data-field="posting_type"]').value;
-    const amt = parseFloat(row.querySelector('[data-field="amount"]').value) || 0;
-    if (type === "Debit") totalDebit += amt;
-    else totalCredit += amt;
+function removeICLine(btn, side) {
+  btn.closest("tr").remove();
+  renumberICLines(side);
+  updateICBalance(side);
+}
+
+function renumberICLines(side) {
+  const tbody = document.getElementById(`ic-${side}-lines`);
+  tbody.querySelectorAll("tr").forEach((tr, i) => {
+    const numCell = tr.querySelector(".ic-je-col-num");
+    if (numCell) numCell.textContent = i + 1;
   });
-  const balEl = document.getElementById(`ic-${side}-balance`);
+}
+
+function updateICBalance(side) {
+  const tbody = document.getElementById(`ic-${side}-lines`);
+  const rows = tbody.querySelectorAll("tr");
+  let totalDebit = 0, totalCredit = 0;
+  rows.forEach((tr) => {
+    totalDebit += parseFloat(tr.querySelector('[data-field="debit"]')?.value) || 0;
+    totalCredit += parseFloat(tr.querySelector('[data-field="credit"]')?.value) || 0;
+  });
+
+  document.getElementById(`ic-${side}-total-debit`).textContent = `$${totalDebit.toFixed(2)}`;
+  document.getElementById(`ic-${side}-total-credit`).textContent = `$${totalCredit.toFixed(2)}`;
+
+  const badge = document.getElementById(`ic-${side}-balance-badge`);
   const diff = Math.abs(totalDebit - totalCredit);
-  const isBalanced = diff < 0.005 && (totalDebit > 0 || totalCredit > 0);
-  balEl.innerHTML = `
-    <span>Debits: $${totalDebit.toFixed(2)}</span>
-    <span>Credits: $${totalCredit.toFixed(2)}</span>
-    <span class="ic-balance-diff ${isBalanced ? 'balanced' : 'unbalanced'}">
-      ${rows.length === 0 ? 'No lines' : isBalanced ? 'Balanced' : `Off by $${diff.toFixed(2)}`}
-    </span>
-  `;
+  const hasLines = rows.length > 0;
+  const isBalanced = diff < 0.005 && hasLines && (totalDebit > 0 || totalCredit > 0);
+  badge.className = `ic-balance-diff ${hasLines ? (isBalanced ? 'balanced' : 'unbalanced') : ''}`;
+  badge.textContent = !hasLines ? '' : isBalanced ? 'Balanced' : `Off by $${diff.toFixed(2)}`;
 }
 
 function getICLines(side) {
-  const container = document.getElementById(`ic-${side}-lines`);
-  const rows = container.querySelectorAll(".ic-line-row");
+  const tbody = document.getElementById(`ic-${side}-lines`);
+  const rows = tbody.querySelectorAll("tr");
   const lines = [];
-  rows.forEach((row) => {
-    const posting_type = row.querySelector('[data-field="posting_type"]').value;
-    const account_name = row.querySelector('[data-field="account_name"]').value;
-    const amount = parseFloat(row.querySelector('[data-field="amount"]').value) || 0;
-    const description = row.querySelector('[data-field="description"]').value;
-    const entitySel = row.querySelector('[data-field="entity_id"]');
+  rows.forEach((tr) => {
+    const account_name = tr.querySelector('[data-field="account_name"]')?.value;
+    const debitAmt = parseFloat(tr.querySelector('[data-field="debit"]')?.value) || 0;
+    const creditAmt = parseFloat(tr.querySelector('[data-field="credit"]')?.value) || 0;
+    const description = tr.querySelector('[data-field="description"]')?.value;
+    const entitySel = tr.querySelector('[data-field="entity_id"]');
     const entity_id = entitySel && !entitySel.classList.contains("hidden") ? entitySel.value || null : null;
-    if (account_name && amount > 0) {
-      lines.push({ side, posting_type, account_name, amount, entity_id, description: description || null });
+    if (account_name && debitAmt > 0) {
+      lines.push({ side, posting_type: "Debit", account_name, amount: debitAmt, entity_id, description: description || null });
+    }
+    if (account_name && creditAmt > 0) {
+      lines.push({ side, posting_type: "Credit", account_name, amount: creditAmt, entity_id, description: description || null });
     }
   });
   return lines;
@@ -1035,8 +1079,8 @@ function clearICLines(side) {
 }
 
 async function onLineAccountChange(selectEl, side, idx) {
-  const row = selectEl.closest(".ic-line-row");
-  const entitySel = row.querySelector('[data-field="entity_id"]');
+  const tr = selectEl.closest("tr");
+  const entitySel = tr.querySelector('[data-field="entity_id"]');
   const selectedOption = selectEl.options[selectEl.selectedIndex];
   const accountType = selectedOption?.dataset?.accountType || "";
 
@@ -1065,10 +1109,8 @@ async function onLineAccountChange(selectEl, side, idx) {
   }
 }
 
-function copyICEntry(entryId) {
-  const e = icHistoryEntries.find((h) => h.id === entryId);
-  if (!e) { showToast("Entry not found.", "error"); return; }
-
+// --- Populate form from an entry (used by copy & edit) ---
+function populateICForm(e, options) {
   switchTab("ic", "new");
 
   if (e.source_company_id) {
@@ -1088,11 +1130,14 @@ function copyICEntry(entryId) {
     if (descEl) descEl.value = e.description;
   }
 
-  const now = new Date();
   const dateEl = document.getElementById("ic-date");
-  if (dateEl) dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (options?.keepDate && e.date) {
+    dateEl.value = e.date;
+  } else {
+    const now = new Date();
+    dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }
 
-  // Clear existing lines and populate from entry
   clearICLines("source");
   clearICLines("dest");
 
@@ -1102,28 +1147,61 @@ function copyICEntry(entryId) {
         addICLine(line.side, { posting_type: line.posting_type, account_name: line.account_name, amount: line.amount, description: line.description || "" });
       }
     } else {
-      // Legacy single-line entry
       if (e.source_debit_account) addICLine("source", { posting_type: "Debit", account_name: e.source_debit_account, amount: e.amount });
       if (e.source_credit_account) addICLine("source", { posting_type: "Credit", account_name: e.source_credit_account, amount: e.amount });
       if (e.dest_debit_account) addICLine("dest", { posting_type: "Debit", account_name: e.dest_debit_account, amount: e.amount });
       if (e.dest_credit_account) addICLine("dest", { posting_type: "Credit", account_name: e.dest_credit_account, amount: e.amount });
     }
-    // Set account values after accounts load
-    setTimeout(() => {
-      document.querySelectorAll("#ic-source-lines .ic-line-row, #ic-dest-lines .ic-line-row").forEach((row) => {
-        const acctSel = row.querySelector('[data-field="account_name"]');
-        const preset = acctSel?.dataset?.presetValue;
-        if (preset) acctSel.value = preset;
-      });
-      updateICBalance("source");
-      updateICBalance("dest");
-    }, 300);
+    setTimeout(() => { updateICBalance("source"); updateICBalance("dest"); }, 300);
   }, 800);
-
-  showToast(`Copied entry to new form. Adjust as needed and submit.`, "success");
 }
 
-async function createICEntry() {
+function copyICEntry(entryId) {
+  const e = icHistoryEntries.find((h) => h.id === entryId);
+  if (!e) { showToast("Entry not found.", "error"); return; }
+  icEditingId = null;
+  setICFormMode("create");
+  populateICForm(e, { keepDate: false });
+  showToast("Copied entry to new form. Adjust as needed.", "success");
+}
+
+// --- Edit mode for pending entries ---
+let icEditingId = null;
+
+function editICEntry(entryId) {
+  const e = icHistoryEntries.find((h) => h.id === entryId);
+  if (!e) { showToast("Entry not found.", "error"); return; }
+  icEditingId = entryId;
+  setICFormMode("edit");
+  populateICForm(e, { keepDate: true });
+  showToast("Editing entry. Make changes and click Update.", "info");
+}
+
+function cancelICEdit() {
+  icEditingId = null;
+  setICFormMode("create");
+  clearICLines("source");
+  clearICLines("dest");
+  document.getElementById("ic-description").value = "";
+  document.getElementById("ic-date").value = "";
+  showToast("Edit cancelled.", "info");
+}
+
+function setICFormMode(mode) {
+  const submitBtn = document.getElementById("ic-submit-btn");
+  const cancelBtn = document.getElementById("ic-cancel-edit-btn");
+  if (mode === "edit") {
+    submitBtn.textContent = "Update Entry";
+    submitBtn.setAttribute("onclick", "submitICEntry()");
+    cancelBtn.style.display = "";
+  } else {
+    submitBtn.textContent = "Create Entry";
+    submitBtn.setAttribute("onclick", "submitICEntry()");
+    cancelBtn.style.display = "none";
+  }
+}
+
+async function submitICEntry() {
   const sourceLines = getICLines("source");
   const destLines = getICLines("dest");
   const allLines = [...sourceLines, ...destLines];
@@ -1151,14 +1229,25 @@ async function createICEntry() {
     description: document.getElementById("ic-description").value,
     lines: allLines,
   };
+
   try {
-    await apiPost("/api/intercompany", entry);
-    showToast("IC entry created.", "success");
+    if (icEditingId) {
+      await apiPut(`/api/intercompany/${icEditingId}`, entry);
+      showToast("Entry updated.", "success");
+      icEditingId = null;
+      setICFormMode("create");
+    } else {
+      await apiPost("/api/intercompany", entry);
+      showToast("IC entry created.", "success");
+    }
     clearICLines("source");
     clearICLines("dest");
     switchTab("ic", "history");
   } catch (e) { showToast("Error: " + e.message, "error"); }
 }
+
+// Keep old name as alias
+async function createICEntry() { return submitICEntry(); }
 
 async function saveAsTemplate() {
   const name = prompt("Template name:");

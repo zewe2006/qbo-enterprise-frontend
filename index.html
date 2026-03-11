@@ -401,39 +401,74 @@
             <input class="form-input" type="text" id="ic-description" placeholder="e.g., Rent allocation for March 2026">
           </div>
 
-          <!-- Source Company Lines -->
-          <div class="ic-lines-section">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
-              <label class="form-label" style="margin:0;font-weight:600;">Source Company Lines</label>
+          <!-- Source Company JE Table -->
+          <div class="ic-je-section">
+            <div class="ic-je-section-header">
+              <span class="ic-je-section-title">Source Company Journal Entry</span>
               <button class="btn btn-sm btn-secondary" onclick="addICLine('source')">+ Add Line</button>
             </div>
-            <div class="ic-lines-header">
-              <span>Type</span><span>Account</span><span>Amount</span><span>Memo</span><span></span>
-            </div>
-            <div id="ic-source-lines"></div>
-            <div class="ic-balance-row" id="ic-source-balance">
-              <span>Debits: $0.00</span><span>Credits: $0.00</span><span class="ic-balance-diff balanced">Balanced</span>
-            </div>
+            <table class="ic-je-table">
+              <thead>
+                <tr>
+                  <th class="ic-je-col-num">#</th>
+                  <th class="ic-je-col-account">ACCOUNT</th>
+                  <th class="ic-je-col-amount">DEBITS</th>
+                  <th class="ic-je-col-amount">CREDITS</th>
+                  <th class="ic-je-col-desc">DESCRIPTION</th>
+                  <th class="ic-je-col-action"></th>
+                </tr>
+              </thead>
+              <tbody id="ic-source-lines"></tbody>
+              <tfoot>
+                <tr class="ic-je-totals">
+                  <td></td>
+                  <td style="text-align:right;font-weight:600;font-size:var(--text-sm);">Total</td>
+                  <td class="ic-je-col-amount" id="ic-source-total-debit">$0.00</td>
+                  <td class="ic-je-col-amount" id="ic-source-total-credit">$0.00</td>
+                  <td colspan="2">
+                    <span class="ic-balance-diff balanced" id="ic-source-balance-badge">Balanced</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
 
-          <!-- Dest Company Lines -->
-          <div class="ic-lines-section">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
-              <label class="form-label" style="margin:0;font-weight:600;">Destination Company Lines</label>
+          <!-- Dest Company JE Table -->
+          <div class="ic-je-section">
+            <div class="ic-je-section-header">
+              <span class="ic-je-section-title">Destination Company Journal Entry</span>
               <button class="btn btn-sm btn-secondary" onclick="addICLine('dest')">+ Add Line</button>
             </div>
-            <div class="ic-lines-header">
-              <span>Type</span><span>Account</span><span>Amount</span><span>Memo</span><span></span>
-            </div>
-            <div id="ic-dest-lines"></div>
-            <div class="ic-balance-row" id="ic-dest-balance">
-              <span>Debits: $0.00</span><span>Credits: $0.00</span><span class="ic-balance-diff balanced">Balanced</span>
-            </div>
+            <table class="ic-je-table">
+              <thead>
+                <tr>
+                  <th class="ic-je-col-num">#</th>
+                  <th class="ic-je-col-account">ACCOUNT</th>
+                  <th class="ic-je-col-amount">DEBITS</th>
+                  <th class="ic-je-col-amount">CREDITS</th>
+                  <th class="ic-je-col-desc">DESCRIPTION</th>
+                  <th class="ic-je-col-action"></th>
+                </tr>
+              </thead>
+              <tbody id="ic-dest-lines"></tbody>
+              <tfoot>
+                <tr class="ic-je-totals">
+                  <td></td>
+                  <td style="text-align:right;font-weight:600;font-size:var(--text-sm);">Total</td>
+                  <td class="ic-je-col-amount" id="ic-dest-total-debit">$0.00</td>
+                  <td class="ic-je-col-amount" id="ic-dest-total-credit">$0.00</td>
+                  <td colspan="2">
+                    <span class="ic-balance-diff balanced" id="ic-dest-balance-badge">Balanced</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
 
           <div style="margin-top:var(--space-4);display:flex;gap:var(--space-3);">
-            <button class="btn btn-primary" onclick="createICEntry()">Create Entry</button>
+            <button class="btn btn-primary" id="ic-submit-btn" onclick="createICEntry()">Create Entry</button>
             <button class="btn btn-secondary" onclick="saveAsTemplate()">Save as Template</button>
+            <button class="btn btn-ghost" id="ic-cancel-edit-btn" onclick="cancelICEdit()" style="display:none;">Cancel Edit</button>
           </div>
         </div>
       </div>
