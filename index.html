@@ -180,22 +180,34 @@
     <section id="page-dashboard" class="page-content active">
       <div class="dashboard-period-bar">
         <div class="filter-row" style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
-          <label style="font-weight:600;font-size:var(--text-sm);color:var(--color-text-secondary);">Period</label>
-          <select id="dash-period" onchange="onDashPeriodChange()" style="min-width:200px;">
-            <option value="last_month" selected>Last Month</option>
-            <option value="ytd_last_month">Year to End of Last Month</option>
-            <option value="custom">Custom Date Range</option>
-          </select>
+          <div class="filter-group" style="margin:0;">
+            <label style="font-weight:600;font-size:var(--text-xs);color:var(--color-text-secondary);margin-bottom:2px;display:block;">Companies</label>
+            <div class="multi-company-select" id="dash-company-wrap">
+              <button type="button" class="multi-select-btn" onclick="toggleMultiSelect('dash')" id="dash-company-btn">All Companies</button>
+              <div class="multi-select-dropdown hidden" id="dash-company-dropdown">
+                <label class="multi-opt"><input type="checkbox" value="all" checked onchange="handleAllToggle('dash', this)"> <span>All Companies (Consolidated)</span></label>
+                <div id="dash-company-options"></div>
+              </div>
+            </div>
+          </div>
+          <div class="filter-group" style="margin:0;">
+            <label style="font-weight:600;font-size:var(--text-xs);color:var(--color-text-secondary);margin-bottom:2px;display:block;">Period</label>
+            <select id="dash-period" onchange="onDashPeriodChange()" style="min-width:200px;">
+              <option value="last_month" selected>Last Month</option>
+              <option value="ytd_last_month">Year to End of Last Month</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+          </div>
           <div id="dash-custom-dates" style="display:none;align-items:center;gap:var(--space-2);">
             <input type="date" id="dash-start-date" style="width:150px;">
             <span style="color:var(--color-text-secondary);">to</span>
             <input type="date" id="dash-end-date" style="width:150px;">
           </div>
-          <button class="btn btn-primary btn-sm" onclick="loadDashboard()" style="padding:6px 16px;">
+          <button class="btn btn-primary btn-sm" onclick="loadDashboard()" style="padding:6px 16px;align-self:flex-end;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Refresh
           </button>
-          <span id="dash-period-label" style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-left:auto;"></span>
+          <span id="dash-period-label" style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-left:auto;align-self:flex-end;"></span>
         </div>
       </div>
 

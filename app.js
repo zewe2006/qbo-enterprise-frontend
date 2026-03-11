@@ -152,8 +152,8 @@ function populateCompanySelectors() {
     if (current) sel.value = current;
   });
 
-  // Multi-select company checkboxes for report pages
-  ["pl", "bs", "cf"].forEach((prefix) => {
+  // Multi-select company checkboxes for report pages + dashboard
+  ["pl", "bs", "cf", "dash"].forEach((prefix) => {
     const optionsDiv = document.getElementById(`${prefix}-company-options`);
     if (!optionsDiv) return;
     let html = "";
@@ -195,7 +195,7 @@ function toggleMultiSelect(prefix) {
   const dd = document.getElementById(`${prefix}-company-dropdown`);
   dd.classList.toggle("hidden");
   // Close other dropdowns
-  ["pl", "bs", "cf"].forEach((p) => {
+  ["pl", "bs", "cf", "dash"].forEach((p) => {
     if (p !== prefix) {
       const other = document.getElementById(`${p}-company-dropdown`);
       if (other) other.classList.add("hidden");
@@ -255,7 +255,7 @@ function getSelectedCompanies(prefix) {
 // Close dropdowns when clicking outside
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".multi-company-select")) {
-    ["pl", "bs", "cf"].forEach((p) => {
+    ["pl", "bs", "cf", "dash"].forEach((p) => {
       const dd = document.getElementById(`${p}-company-dropdown`);
       if (dd) dd.classList.add("hidden");
     });
@@ -340,6 +340,13 @@ async function loadDashboard() {
     const sd = document.getElementById("dash-start-date").value;
     const ed = document.getElementById("dash-end-date").value;
     if (sd && ed) url += `&start_date=${sd}&end_date=${ed}`;
+  }
+  // Company filter
+  const sel = getSelectedCompanies("dash");
+  if (sel.company_ids && sel.company_ids.length > 0) {
+    url += `&company_ids=${sel.company_ids.join(",")}`;
+  } else if (sel.company_id && sel.company_id !== "all") {
+    url += `&company_ids=${sel.company_id}`;
   }
 
   // Show loading state on KPIs
