@@ -63,11 +63,24 @@ function doLogout() {
 function showApp() {
   document.getElementById("login-page").style.display = "none";
   document.getElementById("app-shell").classList.remove("hidden");
-  document.getElementById("user-display").textContent = currentUser.email;
+  document.getElementById("user-display").textContent =
+    (currentUser.name || currentUser.email) + (currentUser.role === "admin" ? " (Admin)" : " (Viewer)");
+  // Show/hide admin-only nav items
+  const navUsers = document.getElementById("nav-users");
+  if (navUsers) navUsers.style.display = currentUser.role === "admin" ? "" : "none";
+  applyRoleRestrictions();
   initDefaultDates();
   loadCompanyList();
   navigateTo(location.hash.slice(1) || "dashboard");
   loadDashboard();
+}
+
+function applyRoleRestrictions() {
+  // Hide write-action elements for viewers
+  const isViewer = currentUser.role === "viewer";
+  document.querySelectorAll(".admin-only").forEach((el) => {
+    el.style.display = isViewer ? "none" : "";
+  });
 }
 
 // --- API Helpers ---
@@ -268,12 +281,18 @@ function navigateTo(page) {
     intercompany: "Intercompany Journal Entries",
     companies: "Company Management",
     "account-mapping": "Account Mapping",
+    users: "User Management",
   };
+  // Block non-admin from users page
+  if (page === "users" && currentUser && currentUser.role !== "admin") {
+    page = "dashboard";
+  }
   document.getElementById("page-title").textContent = titles[page] || "Dashboard";
   location.hash = page;
   if (page === "companies") loadCompanies();
   if (page === "intercompany") loadICHistory();
   if (page === "account-mapping") loadAccountMappings();
+  if (page === "users") loadUsers();
 }
 
 window.addEventListener("hashchange", () => {
@@ -1499,5 +1518,138 @@ async function deleteMapping(id) {
   catch (e) { showToast("Error: " + e.message, "error"); }
 }
 
+// =====================================================================
+//  USER MANAGEMENT
+// =====================================================================
+
+function _renderCompanyCheckboxes(containerId, selectedIds) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!allCompanies.length) {
+    el.innerHTML = '<span class="text-muted" style="font-size:var(--text-sm);">No companies available. Connect a QBO company first.</span>';
+    return;
+  }
+  const selected = new Set(selectedIds || []);
+  el.innerHTML = allCompanies.map((c) =>
+    `<label class="user-company-opt"><input type="checkbox" value="${c.id}"${selected.has(c.id) ? " checked" : ""}> ${c.name}</label>`
+  ).join("");
+}
+
+function _getCheckedCompanyIds(containerId) {
+  return Array.from(document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)).map((cb) => cb.value);
+}
+
+async function loadUsers() {
+  try {
+    const users = await apiGet("/api/users");
+    _renderCompanyCheckboxes("new-user-companies", []);
+    const el = document.getElementById("users-list");
+    if (!users.length) {
+      el.innerHTML = '<p class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">No users found.</p>';
+      return;
+    }
+    let html = '<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Company Access</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+    for (const u of users) {
+      const companyNames = u.company_ids.map((cid) => {
+        const c = allCompanies.find((x) => x.id === cid);
+        return c ? c.name : cid;
+      });
+      const roleLabel = u.role === "admin"
+        ? '<span class="badge badge-success">Admin</span>'
+        : '<span class="badge badge-neutral">Viewer</span>';
+      const accessLabel = u.role === "admin"
+        ? '<span class="text-muted" style="font-size:var(--text-xs);">All (Admin)</span>'
+        : (companyNames.length ? companyNames.map((n) => `<span class="badge badge-neutral" style="margin:1px;font-size:10px;">${n}</span>`).join(" ") : '<span class="text-muted" style="font-size:var(--text-xs);">None</span>');
+      const isSelf = u.id === currentUser.id;
+      html += `<tr>
+        <td>${u.name || "-"}</td>
+        <td>${u.email}</td>
+        <td>${roleLabel}</td>
+        <td style="max-width:260px;">${accessLabel}</td>
+        <td style="font-size:var(--text-xs);white-space:nowrap;">${u.created_at ? u.created_at.split("T")[0] : "-"}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-secondary" onclick='openEditUser(${JSON.stringify(u).replace(/'/g, "&apos;")})'>Edit</button>
+          ${isSelf ? "" : `<button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteUser('${u.id}','${u.email}')">Delete</button>`}
+        </td>
+      </tr>`;
+    }
+    el.innerHTML = html + "</tbody></table>";
+  } catch (e) {
+    showToast("Error loading users: " + e.message, "error");
+  }
+}
+
+async function createNewUser() {
+  const name = document.getElementById("new-user-name").value.trim();
+  const email = document.getElementById("new-user-email").value.trim();
+  const password = document.getElementById("new-user-password").value;
+  const role = document.getElementById("new-user-role").value;
+  const companyIds = _getCheckedCompanyIds("new-user-companies");
+  if (!name || !email || !password) { showToast("Name, email, and password are required.", "error"); return; }
+  if (password.length < 6) { showToast("Password must be at least 6 characters.", "error"); return; }
+  try {
+    await apiPost("/api/users", { name, email, password, role, company_ids: companyIds });
+    showToast(`User "${name}" created successfully.`, "success");
+    document.getElementById("new-user-name").value = "";
+    document.getElementById("new-user-email").value = "";
+    document.getElementById("new-user-password").value = "";
+    document.getElementById("new-user-role").value = "viewer";
+    loadUsers();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
+}
+
+function openEditUser(u) {
+  document.getElementById("edit-user-id").value = u.id;
+  document.getElementById("edit-user-name").value = u.name || "";
+  document.getElementById("edit-user-email").value = u.email;
+  document.getElementById("edit-user-role").value = u.role;
+  document.getElementById("edit-user-password").value = "";
+  _renderCompanyCheckboxes("edit-user-companies", u.company_ids || []);
+  document.getElementById("edit-user-modal").classList.add("open");
+}
+
+async function saveUserEdit() {
+  const userId = document.getElementById("edit-user-id").value;
+  const name = document.getElementById("edit-user-name").value.trim();
+  const email = document.getElementById("edit-user-email").value.trim();
+  const role = document.getElementById("edit-user-role").value;
+  const password = document.getElementById("edit-user-password").value;
+  const companyIds = _getCheckedCompanyIds("edit-user-companies");
+  if (!name || !email) { showToast("Name and email are required.", "error"); return; }
+  const body = { name, email, role, company_ids: companyIds };
+  if (password) body.password = password;
+  try {
+    const updated = await apiPut(`/api/users/${userId}`, body);
+    showToast(`User "${updated.name}" updated.`, "success");
+    closeModal("edit-user-modal");
+    // If user edited themselves, update currentUser
+    if (userId === currentUser.id) {
+      currentUser.name = updated.name;
+      currentUser.email = updated.email;
+      currentUser.role = updated.role;
+      currentUser.company_ids = updated.company_ids;
+      document.getElementById("user-display").textContent =
+        (currentUser.name || currentUser.email) + (currentUser.role === "admin" ? " (Admin)" : " (Viewer)");
+    }
+    loadUsers();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
+}
+
+async function deleteUser(userId, email) {
+  if (!confirm(`Delete user "${email}"? This cannot be undone.`)) return;
+  try {
+    await apiDelete(`/api/users/${userId}`);
+    showToast(`User "${email}" deleted.`, "success");
+    loadUsers();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
+}
+
 // --- Init ---
 document.getElementById("login-password").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+document.getElementById("login-email").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });

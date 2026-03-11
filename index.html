@@ -40,17 +40,16 @@
     <div id="login-form">
       <div class="form-group">
         <label class="form-label" for="login-email">Email</label>
-        <input class="form-input" type="email" id="login-email" placeholder="admin@enterprise.local" value="admin@enterprise.local">
+        <input class="form-input" type="email" id="login-email" placeholder="Enter your email">
       </div>
       <div class="form-group">
         <label class="form-label" for="login-password">Password</label>
-        <input class="form-input" type="password" id="login-password" placeholder="Password" value="admin123">
+        <input class="form-input" type="password" id="login-password" placeholder="Enter your password">
       </div>
       <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:var(--space-2);" onclick="doLogin()">
         Sign In
       </button>
-      <p class="text-center text-muted mt-4" style="font-size:var(--text-xs);">
-        Default: admin@enterprise.local / admin123
+      <p id="login-hint" class="text-center text-muted mt-4" style="font-size:var(--text-xs);display:none;">
       </p>
     </div>
   </div>
@@ -121,6 +120,10 @@
         <li><a href="#account-mapping" data-page="account-mapping">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="5" cy="18" r="3"/><circle cx="19" cy="18" r="3"/><path d="M8 6h8M8 18h8M5 9v6M19 9v6"/></svg>
           <span>Account Mapping</span>
+        </a></li>
+        <li id="nav-users" style="display:none;"><a href="#users" data-page="users">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Users</span>
         </a></li>
       </ul>
     </div>
@@ -588,6 +591,51 @@
       </div>
     </section>
 
+    <!-- ======== USER MANAGEMENT PAGE (Admin Only) ======== -->
+    <section id="page-users" class="page-content">
+      <div class="card mb-6">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="card-title">Create New User</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input class="form-input" type="text" id="new-user-name" placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" id="new-user-email" placeholder="john@company.com">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-input" type="password" id="new-user-password" placeholder="Enter password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="new-user-role">
+              <option value="viewer">Viewer (Read Only)</option>
+              <option value="admin">Admin (Full Access)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Company Access</label>
+          <div id="new-user-companies" class="user-company-checkboxes"></div>
+        </div>
+        <button class="btn btn-primary" onclick="createNewUser()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          Create User
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">All Users</span></div>
+        <div id="users-list" style="overflow-x:auto;"></div>
+      </div>
+    </section>
+
     <!-- ======== ACCOUNT MAPPING PAGE ======== -->
     <section id="page-account-mapping" class="page-content">
       <div class="card mb-6">
@@ -622,6 +670,46 @@
     </section>
 
   </main>
+</div>
+
+<!-- ======== MODAL: Edit User ======== -->
+<div id="edit-user-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:520px;">
+    <div class="modal-header">
+      <h3>Edit User</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('edit-user-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4);">
+      <input type="hidden" id="edit-user-id">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input class="form-input" type="text" id="edit-user-name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" type="email" id="edit-user-email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select class="form-select" id="edit-user-role">
+          <option value="viewer">Viewer (Read Only)</option>
+          <option value="admin">Admin (Full Access)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Password <span style="color:var(--color-text-tertiary);font-weight:400;">(leave blank to keep current)</span></label>
+        <input class="form-input" type="password" id="edit-user-password" placeholder="Enter new password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Company Access</label>
+        <div id="edit-user-companies" class="user-company-checkboxes"></div>
+      </div>
+      <div style="display:flex;gap:var(--space-3);margin-top:var(--space-4);">
+        <button class="btn btn-primary" onclick="saveUserEdit()">Save Changes</button>
+        <button class="btn btn-ghost" onclick="closeModal('edit-user-modal')">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ======== MODAL: Company Accounts ======== -->
