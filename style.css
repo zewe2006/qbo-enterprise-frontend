@@ -1,5 +1,5 @@
 /* ============================================
-   QBO Enterprise Dashboard — Design Tokens & Styles
+   EnterpriseLedger — Design Tokens & Styles
    ============================================ */
 
 /* --- Fonts --- */
@@ -49,10 +49,12 @@
   --color-text-muted:     #7a7974;
   --color-text-faint:     #bab9b4;
   --color-text-inverse:   #f9f8f4;
-  --color-primary:        #01696f;
-  --color-primary-hover:  #0c4e54;
-  --color-primary-active: #0f3638;
-  --color-primary-highlight: #cedcd8;
+  --color-primary:        #1a56db;
+  --color-primary-hover:  #1648b8;
+  --color-primary-active: #123d9a;
+  --color-primary-highlight: #dbeafe;
+  --color-accent:         #1a56db;
+  --color-accent-dark:    #1648b8;
   --color-success:        #437a22;
   --color-success-highlight: #d4dfcc;
   --color-error:          #a13544;
@@ -77,7 +79,7 @@
   --sidebar-bg: #1c1b19;
   --sidebar-text: #cdccca;
   --sidebar-text-muted: #797876;
-  --sidebar-active: #01696f;
+  --sidebar-active: #1a56db;
   --sidebar-hover: #2d2c2a;
 }
 
@@ -95,10 +97,12 @@
   --color-text-muted:     #797876;
   --color-text-faint:     #5a5957;
   --color-text-inverse:   #2b2a28;
-  --color-primary:        #4f98a3;
-  --color-primary-hover:  #227f8b;
-  --color-primary-active: #1a626b;
-  --color-primary-highlight: #313b3b;
+  --color-primary:        #60a5fa;
+  --color-primary-hover:  #3b82f6;
+  --color-primary-active: #2563eb;
+  --color-primary-highlight: #1e3a5f;
+  --color-accent:         #60a5fa;
+  --color-accent-dark:    #3b82f6;
   --color-success:        #6daa45;
   --color-success-highlight: #3a4435;
   --color-error:          #dd6974;
@@ -117,7 +121,7 @@
   --sidebar-bg: #111110;
   --sidebar-text: #cdccca;
   --sidebar-text-muted: #5a5957;
-  --sidebar-active: #4f98a3;
+  --sidebar-active: #3b82f6;
   --sidebar-hover: #1c1b19;
 }
 
@@ -130,7 +134,7 @@
     --color-text: #cdccca;
     --color-text-muted: #797876;
     --color-text-faint: #5a5957;
-    --color-primary: #4f98a3;
+    --color-primary: #60a5fa;
   }
 }
 

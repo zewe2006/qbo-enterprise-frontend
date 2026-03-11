@@ -1,5 +1,5 @@
 /* ============================================
-   QBO Enterprise Dashboard — Application Logic
+   EnterpriseLedger — Application Logic
    ============================================ */
 
 // --- API Config ---
