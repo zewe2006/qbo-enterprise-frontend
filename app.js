@@ -1458,13 +1458,13 @@ async function deleteTemplate(templateId) {
 // --- IC Account Dropdowns ---
 let icAccountsCache = {}; // keyed by companyId
 
-async function loadICAccountsFor(side) {
+async function loadICAccountsFor(side, forceRefresh) {
   // side = 'source' | 'dest'
   const companyId = document.getElementById(side === "source" ? "ic-source-company" : "ic-dest-company").value;
   if (!companyId) return;
 
   try {
-    let accounts = icAccountsCache[companyId];
+    let accounts = forceRefresh ? null : icAccountsCache[companyId];
     if (!accounts) {
       accounts = await apiGet(`/api/companies/${companyId}/accounts`);
       icAccountsCache[companyId] = accounts;
@@ -1473,7 +1473,7 @@ async function loadICAccountsFor(side) {
     const container = document.getElementById(`ic-${side}-lines`);
     if (container && accounts.length) {
       const html = buildAccountOptions(accounts);
-      container.querySelectorAll('.ic-line-row [data-field="account_name"]').forEach((sel) => {
+      container.querySelectorAll('[data-field="account_name"]').forEach((sel) => {
         const currentVal = sel.value;
         sel.innerHTML = '<option value="">\u2014 Select Account \u2014</option>' + html;
         if (currentVal) sel.value = currentVal;
