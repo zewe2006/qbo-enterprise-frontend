@@ -835,7 +835,7 @@ async function loadICHistory() {
     const entries = await apiGet("/api/intercompany");
     const el = document.getElementById("ic-history-table");
     if (!entries.length) { el.innerHTML = '<p class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">No intercompany entries yet.</p>'; return; }
-    let html = '<table class="data-table"><thead><tr><th>Date</th><th>Source</th><th>Destination</th><th>Type</th><th class="num">Amount</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+    let html = '<table class="data-table"><thead><tr><th style="width:30px;"></th><th>Date</th><th>Source</th><th>Destination</th><th>Type</th><th class="num">Amount</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
     for (const e of entries) {
       const b = e.status === "posted" ? "badge-success" : e.status === "pending" ? "badge-warning" : e.status === "partial" ? "badge-warning" : "badge-neutral";
       let actions = '';
@@ -844,10 +844,59 @@ async function loadICHistory() {
       } else {
         actions = `<button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
       }
-      html += `<tr><td>${e.date}</td><td>${e.source_company_name || e.source_company_id}</td><td>${e.dest_company_name || e.dest_company_id}</td><td>${e.entry_type}</td><td class="num">$${parseFloat(e.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td><td>${e.description || "-"}</td><td><span class="badge ${b}">${e.status}</span></td><td style="display:flex;gap:var(--space-2);">${actions}</td></tr>`;
+      const rowId = `ic-detail-${e.id}`;
+      const fmtAmt = parseFloat(e.amount).toLocaleString("en-US", { minimumFractionDigits: 2 });
+      const createdAt = e.created_at ? new Date(e.created_at + "Z").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+      const entryLabel = e.entry_type ? e.entry_type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "-";
+
+      html += `<tr style="cursor:pointer;" onclick="toggleICDetail('${rowId}')">`;
+      html += `<td style="text-align:center;"><span class="ic-expand-icon" id="icon-${rowId}">&#9654;</span></td>`;
+      html += `<td>${e.date}</td>`;
+      html += `<td>${e.source_company_name || e.source_company_id}</td>`;
+      html += `<td>${e.dest_company_name || e.dest_company_id}</td>`;
+      html += `<td>${entryLabel}</td>`;
+      html += `<td class="num">$${fmtAmt}</td>`;
+      html += `<td>${e.description || "-"}</td>`;
+      html += `<td><span class="badge ${b}">${e.status}</span></td>`;
+      html += `<td style="display:flex;gap:var(--space-2);" onclick="event.stopPropagation();">${actions}</td>`;
+      html += `</tr>`;
+
+      // Expandable detail row
+      html += `<tr class="ic-detail-row hidden" id="${rowId}"><td colspan="9" style="padding:0;">`;
+      html += `<div class="ic-detail-content">`;
+      html += `<div class="ic-detail-grid">`;
+
+      // Source side
+      html += `<div class="ic-detail-section">`;
+      html += `<div class="ic-detail-label">Source: ${e.source_company_name || e.source_company_id}</div>`;
+      html += `<div class="ic-detail-item"><span class="ic-detail-key">Debit:</span> ${e.source_debit_account || "-"}</div>`;
+      html += `<div class="ic-detail-item"><span class="ic-detail-key">Credit:</span> ${e.source_credit_account || "-"}</div>`;
+      if (e.source_je_id) html += `<div class="ic-detail-item"><span class="ic-detail-key">QBO JE #:</span> <span class="font-mono">${e.source_je_id}</span></div>`;
+      html += `</div>`;
+
+      // Dest side
+      html += `<div class="ic-detail-section">`;
+      html += `<div class="ic-detail-label">Dest: ${e.dest_company_name || e.dest_company_id}</div>`;
+      html += `<div class="ic-detail-item"><span class="ic-detail-key">Debit:</span> ${e.dest_debit_account || "-"}</div>`;
+      html += `<div class="ic-detail-item"><span class="ic-detail-key">Credit:</span> ${e.dest_credit_account || "-"}</div>`;
+      if (e.dest_je_id) html += `<div class="ic-detail-item"><span class="ic-detail-key">QBO JE #:</span> <span class="font-mono">${e.dest_je_id}</span></div>`;
+      html += `</div>`;
+
+      html += `</div>`; // grid
+      html += `<div class="ic-detail-meta">Created: ${createdAt} &bull; ID: <span class="font-mono">${e.id.slice(0, 8)}</span></div>`;
+      html += `</div></td></tr>`;
     }
     el.innerHTML = html + "</tbody></table>";
   } catch { /* ok */ }
+}
+
+function toggleICDetail(rowId) {
+  const row = document.getElementById(rowId);
+  const icon = document.getElementById(`icon-${rowId}`);
+  if (row) {
+    row.classList.toggle("hidden");
+    if (icon) icon.innerHTML = row.classList.contains("hidden") ? "&#9654;" : "&#9660;";
+  }
 }
 
 async function postICEntry(entryId) {
