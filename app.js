@@ -830,19 +830,23 @@ function switchTab(group, tab) {
   if (tab === "templates") loadICTemplates();
 }
 
+let icHistoryEntries = []; // store for copy feature
+
 async function loadICHistory() {
   try {
     const entries = await apiGet("/api/intercompany");
+    icHistoryEntries = entries;
     const el = document.getElementById("ic-history-table");
     if (!entries.length) { el.innerHTML = '<p class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">No intercompany entries yet.</p>'; return; }
     let html = '<table class="data-table"><thead><tr><th style="width:30px;"></th><th>Date</th><th>Source</th><th>Destination</th><th>Type</th><th class="num">Amount</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
     for (const e of entries) {
       const b = e.status === "posted" ? "badge-success" : e.status === "pending" ? "badge-warning" : e.status === "partial" ? "badge-warning" : "badge-neutral";
+      const copyBtn = `<button class="btn btn-sm btn-secondary" onclick="copyICEntry('${e.id}')" title="Copy to new entry">Copy</button>`;
       let actions = '';
       if (e.status === "pending" || e.status === "partial") {
-        actions = `<button class="btn btn-sm btn-primary" onclick="postICEntry('${e.id}')">Post</button> <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
+        actions = `<button class="btn btn-sm btn-primary" onclick="postICEntry('${e.id}')">Post</button> ${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
       } else {
-        actions = `<button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
+        actions = `${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
       }
       const rowId = `ic-detail-${e.id}`;
       const fmtAmt = parseFloat(e.amount).toLocaleString("en-US", { minimumFractionDigits: 2 });
@@ -927,6 +931,65 @@ async function deleteICEntry(entryId) {
   }
 }
 
+function copyICEntry(entryId) {
+  const e = icHistoryEntries.find((h) => h.id === entryId);
+  if (!e) { showToast("Entry not found.", "error"); return; }
+
+  // Switch to New Entry tab
+  switchTab("ic", "new");
+
+  // Populate companies
+  if (e.source_company_id) {
+    const srcEl = document.getElementById("ic-source-company");
+    if (srcEl) { srcEl.value = e.source_company_id; loadICAccountsFor("source"); }
+  }
+  if (e.dest_company_id) {
+    const destEl = document.getElementById("ic-dest-company");
+    if (destEl) { destEl.value = e.dest_company_id; loadICAccountsFor("dest"); }
+  }
+
+  // Populate entry type, description, amount
+  if (e.entry_type) {
+    const typeEl = document.getElementById("ic-type");
+    if (typeEl) typeEl.value = e.entry_type;
+  }
+  if (e.description) {
+    const descEl = document.getElementById("ic-description");
+    if (descEl) descEl.value = e.description;
+  }
+  if (e.amount) {
+    const amtEl = document.getElementById("ic-amount");
+    if (amtEl) amtEl.value = e.amount;
+  }
+
+  // Set today's date
+  const now = new Date();
+  const dateEl = document.getElementById("ic-date");
+  if (dateEl) dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Wait for accounts to load, then set account values
+  setTimeout(() => {
+    if (e.source_debit_account) {
+      const el = document.getElementById("ic-src-debit");
+      if (el) { el.value = e.source_debit_account; onAccountChange("source", "debit"); }
+    }
+    if (e.source_credit_account) {
+      const el = document.getElementById("ic-src-credit");
+      if (el) { el.value = e.source_credit_account; onAccountChange("source", "credit"); }
+    }
+    if (e.dest_debit_account) {
+      const el = document.getElementById("ic-dest-debit");
+      if (el) { el.value = e.dest_debit_account; onAccountChange("dest", "debit"); }
+    }
+    if (e.dest_credit_account) {
+      const el = document.getElementById("ic-dest-credit");
+      if (el) { el.value = e.dest_credit_account; onAccountChange("dest", "credit"); }
+    }
+  }, 800);
+
+  showToast(`Copied entry to new form. Adjust as needed and submit.`, "success");
+}
+
 async function createICEntry() {
   const entry = {
     source_company_id: document.getElementById("ic-source-company").value,
@@ -968,15 +1031,89 @@ async function saveAsTemplate() {
   } catch (e) { showToast("Error: " + e.message, "error"); }
 }
 
+let allTemplates = [];
+
 async function loadICTemplates() {
   try {
-    const tpls = await apiGet("/api/intercompany/templates");
+    allTemplates = await apiGet("/api/intercompany/templates");
     const el = document.getElementById("ic-templates-list");
-    if (!tpls.length) { el.innerHTML = '<p class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">No templates yet.</p>'; return; }
-    let html = '<table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Description</th><th>Action</th></tr></thead><tbody>';
-    for (const t of tpls) html += `<tr><td>${t.name}</td><td>${t.entry_type || "-"}</td><td>${t.description || "-"}</td><td><button class="btn btn-sm btn-secondary" onclick="useTemplate('${t.id}')">Use</button></td></tr>`;
+    if (!allTemplates.length) { el.innerHTML = '<p class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">No templates yet.</p>'; return; }
+    let html = '<table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Source Accounts</th><th>Dest Accounts</th><th>Description</th><th>Actions</th></tr></thead><tbody>';
+    for (const t of allTemplates) {
+      const typeLabel = t.entry_type ? t.entry_type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "-";
+      const srcAccts = [t.source_debit_account, t.source_credit_account].filter(Boolean).join(" / ") || "-";
+      const destAccts = [t.dest_debit_account, t.dest_credit_account].filter(Boolean).join(" / ") || "-";
+      html += `<tr><td><strong>${t.name}</strong></td><td>${typeLabel}</td><td style="font-size:var(--text-xs);">${srcAccts}</td><td style="font-size:var(--text-xs);">${destAccts}</td><td>${t.description || "-"}</td>`;
+      html += `<td style="display:flex;gap:var(--space-2);"><button class="btn btn-sm btn-primary" onclick="useTemplate('${t.id}')">Use</button><button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteTemplate('${t.id}')">&times;</button></td></tr>`;
+    }
     el.innerHTML = html + "</tbody></table>";
   } catch { /* ok */ }
+}
+
+function useTemplate(templateId) {
+  const t = allTemplates.find((tpl) => tpl.id === templateId);
+  if (!t) { showToast("Template not found.", "error"); return; }
+
+  // Switch to the "New Entry" tab
+  switchTab("ic", "new");
+
+  // Populate company selectors
+  if (t.source_company_id) {
+    const srcEl = document.getElementById("ic-source-company");
+    if (srcEl) { srcEl.value = t.source_company_id; loadICAccountsFor("source"); }
+  }
+  if (t.dest_company_id) {
+    const destEl = document.getElementById("ic-dest-company");
+    if (destEl) { destEl.value = t.dest_company_id; loadICAccountsFor("dest"); }
+  }
+
+  // Populate entry type and description
+  if (t.entry_type) {
+    const typeEl = document.getElementById("ic-type");
+    if (typeEl) typeEl.value = t.entry_type;
+  }
+  if (t.description) {
+    const descEl = document.getElementById("ic-description");
+    if (descEl) descEl.value = t.description;
+  }
+
+  // Set today's date
+  const now = new Date();
+  const dateEl = document.getElementById("ic-date");
+  if (dateEl) dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Wait for accounts to load, then set the account values
+  setTimeout(() => {
+    if (t.source_debit_account) {
+      const el = document.getElementById("ic-src-debit");
+      if (el) { el.value = t.source_debit_account; onAccountChange("source", "debit"); }
+    }
+    if (t.source_credit_account) {
+      const el = document.getElementById("ic-src-credit");
+      if (el) { el.value = t.source_credit_account; onAccountChange("source", "credit"); }
+    }
+    if (t.dest_debit_account) {
+      const el = document.getElementById("ic-dest-debit");
+      if (el) { el.value = t.dest_debit_account; onAccountChange("dest", "debit"); }
+    }
+    if (t.dest_credit_account) {
+      const el = document.getElementById("ic-dest-credit");
+      if (el) { el.value = t.dest_credit_account; onAccountChange("dest", "credit"); }
+    }
+  }, 800);
+
+  showToast(`Template "${t.name}" loaded. Set amount and adjust as needed.`, "success");
+}
+
+async function deleteTemplate(templateId) {
+  if (!confirm("Delete this template?")) return;
+  try {
+    await apiDelete(`/api/intercompany/templates/${templateId}`);
+    showToast("Template deleted.", "success");
+    loadICTemplates();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
 }
 
 // --- IC Account Dropdowns ---
