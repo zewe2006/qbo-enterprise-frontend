@@ -395,39 +395,42 @@
               <label class="form-label">Date</label>
               <input class="form-input" type="date" id="ic-date">
             </div>
-            <div class="form-group">
-              <label class="form-label">Amount</label>
-              <input class="form-input" type="number" id="ic-amount" step="0.01" placeholder="0.00">
-            </div>
           </div>
           <div class="form-group">
             <label class="form-label">Description</label>
             <input class="form-input" type="text" id="ic-description" placeholder="e.g., Rent allocation for March 2026">
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Source — Debit Account</label>
-              <select class="form-select" id="ic-src-debit" onchange="onAccountChange('source','debit')"><option value="">— Select source company first —</option></select>
-              <select class="form-select hidden" id="ic-src-debit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+
+          <!-- Source Company Lines -->
+          <div class="ic-lines-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
+              <label class="form-label" style="margin:0;font-weight:600;">Source Company Lines</label>
+              <button class="btn btn-sm btn-secondary" onclick="addICLine('source')">+ Add Line</button>
             </div>
-            <div class="form-group">
-              <label class="form-label">Source — Credit Account</label>
-              <select class="form-select" id="ic-src-credit" onchange="onAccountChange('source','credit')"><option value="">— Select source company first —</option></select>
-              <select class="form-select hidden" id="ic-src-credit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+            <div class="ic-lines-header">
+              <span>Type</span><span>Account</span><span>Amount</span><span>Memo</span><span></span>
             </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Dest — Debit Account</label>
-              <select class="form-select" id="ic-dest-debit" onchange="onAccountChange('dest','debit')"><option value="">— Select dest company first —</option></select>
-              <select class="form-select hidden" id="ic-dest-debit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Dest — Credit Account</label>
-              <select class="form-select" id="ic-dest-credit" onchange="onAccountChange('dest','credit')"><option value="">— Select dest company first —</option></select>
-              <select class="form-select hidden" id="ic-dest-credit-entity" style="margin-top:var(--space-1);"><option value="">— Select Customer/Vendor —</option></select>
+            <div id="ic-source-lines"></div>
+            <div class="ic-balance-row" id="ic-source-balance">
+              <span>Debits: $0.00</span><span>Credits: $0.00</span><span class="ic-balance-diff balanced">Balanced</span>
             </div>
           </div>
+
+          <!-- Dest Company Lines -->
+          <div class="ic-lines-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2);">
+              <label class="form-label" style="margin:0;font-weight:600;">Destination Company Lines</label>
+              <button class="btn btn-sm btn-secondary" onclick="addICLine('dest')">+ Add Line</button>
+            </div>
+            <div class="ic-lines-header">
+              <span>Type</span><span>Account</span><span>Amount</span><span>Memo</span><span></span>
+            </div>
+            <div id="ic-dest-lines"></div>
+            <div class="ic-balance-row" id="ic-dest-balance">
+              <span>Debits: $0.00</span><span>Credits: $0.00</span><span class="ic-balance-diff balanced">Balanced</span>
+            </div>
+          </div>
+
           <div style="margin-top:var(--space-4);display:flex;gap:var(--space-3);">
             <button class="btn btn-primary" onclick="createICEntry()">Create Entry</button>
             <button class="btn btn-secondary" onclick="saveAsTemplate()">Save as Template</button>
