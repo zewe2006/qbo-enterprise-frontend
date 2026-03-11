@@ -786,6 +786,30 @@
   </div>
 </div>
 
+<!-- ======== MODAL: Transaction Detail Drill-Down ======== -->
+<div id="txn-detail-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:95vw;width:1200px;">
+    <div class="modal-header">
+      <h3 id="txn-detail-title">Transaction Detail</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('txn-detail-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="max-height:75vh;overflow:auto;padding:0;">
+      <div id="txn-detail-filters" style="padding:12px 16px;border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+        <span id="txn-detail-badge" class="badge badge-success" style="font-size:var(--text-xs);"></span>
+        <span id="txn-detail-date-range" class="text-muted" style="font-size:var(--text-xs);"></span>
+        <div style="margin-left:auto;">
+          <button class="btn btn-sm btn-secondary" onclick="exportTransactionDetail()">Export CSV</button>
+        </div>
+      </div>
+      <div id="txn-detail-loading" class="text-center" style="padding:var(--space-8);">
+        <div class="loading-spinner" style="margin:0 auto;"></div>
+        <p class="mt-4 text-muted">Loading transactions...</p>
+      </div>
+      <div id="txn-detail-table" style="overflow-x:auto;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ======== MODAL: Edit Template ======== -->
 <div id="edit-template-modal" class="modal-overlay">
   <div class="modal-content" style="max-width:620px;">

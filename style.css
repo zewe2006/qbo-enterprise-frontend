@@ -1405,3 +1405,45 @@ html, body {
 .user-company-opt input[type="checkbox"] {
   accent-color: var(--color-accent);
 }
+
+/* --- Drill-Down Links --- */
+.drilldown-link {
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s, text-decoration 0.15s;
+  font-weight: inherit;
+}
+.drilldown-link:hover {
+  text-decoration: underline;
+  color: var(--color-primary-hover);
+}
+
+/* --- Transaction Detail Table --- */
+.txn-detail-table {
+  font-size: 12px;
+  border-collapse: collapse;
+  width: 100%;
+}
+.txn-detail-table thead th {
+  font-size: 11px;
+  padding: 8px 10px;
+  white-space: nowrap;
+  background: var(--color-surface-offset);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.txn-detail-table tbody td {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.txn-detail-table tbody tr:hover {
+  background: var(--color-surface-offset);
+}
+.txn-detail-table .total-row td {
+  font-weight: 700;
+  border-top: 2px solid var(--color-border);
+  background: var(--color-surface-offset-2);
+}

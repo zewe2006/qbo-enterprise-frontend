@@ -687,7 +687,12 @@ function renderRows(arr, depth, prior, hasCmp) {
 
 function valRow(name, val, pv, hasCmp, cls) {
   const f = (n) => n === 0 ? "$0.00" : (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  let h = `<tr class="${cls}"><td>${name}</td><td class="num">${f(val)}</td>`;
+  const escapedName = name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+  const clickable = name && !cls.includes("total-row") && !cls.includes("section-header");
+  const nameHtml = clickable
+    ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${name}</span>`
+    : name;
+  let h = `<tr class="${cls}"><td>${nameHtml}</td><td class="num">${f(val)}</td>`;
   if (hasCmp) {
     const ch = val - pv;
     const pct = pv ? (ch / Math.abs(pv) * 100) : 0;
@@ -763,7 +768,9 @@ function renderByCompanyRows(arr, depth, breakdowns, companyNames, colCount) {
       const name = r.ColData[0]?.value || "";
       const totalVal = parseFloat(r.ColData[1]?.value) || 0;
       const cls = depth > 0 ? `indent-${Math.min(depth, 2)}` : "";
-      h += `<tr class="${cls}"><td>${name}</td>`;
+      const escapedName = name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+      const nameHtml = name ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${name}</span>` : "";
+      h += `<tr class="${cls}"><td>${nameHtml}</td>`;
       for (const cn of companyNames) {
         const cv = (breakdowns[cn] || {})[name] || 0;
         h += `<td class="num">${f(cv)}</td>`;
@@ -839,6 +846,192 @@ function exportReport(type) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${{ pl: "ProfitAndLoss", bs: "BalanceSheet", cf: "CashFlow" }[type] || "Report"}_${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+}
+
+// =====================================================================
+//  TRANSACTION DETAIL DRILL-DOWN
+// =====================================================================
+
+let currentTxnDetail = null;
+
+function _getActiveReportContext() {
+  // Determine which report page is active and grab its filter values
+  const pages = ["pl", "bs", "cf"];
+  for (const p of pages) {
+    const pageEl = document.getElementById(`page-${p === "pl" ? "profit-loss" : p === "bs" ? "balance-sheet" : "cash-flow"}`);
+    if (pageEl && !pageEl.classList.contains("hidden") && pageEl.style.display !== "none") {
+      const sel = getSelectedCompanies(p);
+      return {
+        company_id: sel.company_id,
+        company_ids: sel.company_ids,
+        start_date: document.getElementById(`${p}-start-date`)?.value || null,
+        end_date: document.getElementById(`${p}-end-date`)?.value || null,
+        date_macro: document.getElementById(`${p}-date-macro`)?.value || null,
+        accounting_method: document.getElementById(`${p}-method`)?.value || "Accrual",
+      };
+    }
+  }
+  // Fallback: check location hash
+  const hash = (location.hash || "").replace("#", "");
+  const p = hash === "profit-loss" ? "pl" : hash === "balance-sheet" ? "bs" : hash === "cash-flow" ? "cf" : null;
+  if (p) {
+    const sel = getSelectedCompanies(p);
+    return {
+      company_id: sel.company_id,
+      company_ids: sel.company_ids,
+      start_date: document.getElementById(`${p}-start-date`)?.value || null,
+      end_date: document.getElementById(`${p}-end-date`)?.value || null,
+      date_macro: document.getElementById(`${p}-date-macro`)?.value || null,
+      accounting_method: document.getElementById(`${p}-method`)?.value || "Accrual",
+    };
+  }
+  return {};
+}
+
+async function drillDownAccount(accountName) {
+  const ctx = _getActiveReportContext();
+  const modal = document.getElementById("txn-detail-modal");
+  const loading = document.getElementById("txn-detail-loading");
+  const table = document.getElementById("txn-detail-table");
+
+  document.getElementById("txn-detail-title").textContent = `Transaction Detail: ${accountName}`;
+  document.getElementById("txn-detail-badge").textContent = `Account: ${accountName}`;
+  const dm = ctx.date_macro || "";
+  const sd = ctx.start_date || "";
+  const ed = ctx.end_date || "";
+  document.getElementById("txn-detail-date-range").textContent = dm ? dm : (sd && ed ? `${sd} to ${ed}` : "");
+
+  loading.classList.remove("hidden");
+  table.innerHTML = "";
+  modal.classList.add("active");
+
+  try {
+    const data = await apiPost("/api/reports/transaction-detail", {
+      account_name: accountName,
+      company_id: ctx.company_id || "all",
+      company_ids: ctx.company_ids || null,
+      start_date: ctx.start_date || null,
+      end_date: ctx.end_date || null,
+      date_macro: ctx.date_macro || null,
+      accounting_method: ctx.accounting_method || "Accrual",
+    });
+    currentTxnDetail = data;
+    loading.classList.add("hidden");
+    renderTransactionDetail(data);
+  } catch (e) {
+    loading.innerHTML = `<p style="color:var(--color-error);padding:var(--space-4);">Error loading transactions: ${e.message}</p>`;
+  }
+}
+
+function renderTransactionDetail(data) {
+  const el = document.getElementById("txn-detail-table");
+  const txns = data.transactions || [];
+
+  if (!txns.length) {
+    el.innerHTML = '<p class="text-muted" style="padding:var(--space-6);text-align:center;">No transactions found for this account in the selected period.</p>';
+    return;
+  }
+
+  // Determine columns dynamically from first txn keys (excluding "company")
+  // Use a standard set of columns matching Xero-style layout
+  const fmt = (v) => {
+    if (!v || v === "") return "";
+    const n = parseFloat(v);
+    if (isNaN(n)) return v;
+    return n === 0 ? "$0.00" : (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Map QBO column titles to display names
+  const colMap = [
+    { key: "company", label: "Company" },
+    { key: "Date", label: "Date" },
+    { key: "Transaction Type", label: "Type" },
+    { key: "Num", label: "Ref #" },
+    { key: "Name", label: "Contact" },
+    { key: "Memo/Description", label: "Description" },
+    { key: "Account", label: "Account" },
+    { key: "Debit", label: "Debit", numeric: true },
+    { key: "Credit", label: "Credit", numeric: true },
+    { key: "Amount", label: "Net", numeric: true },
+    { key: "Balance", label: "Balance", numeric: true },
+  ];
+
+  // Filter to columns that actually have data
+  const activeCols = colMap.filter(c => txns.some(t => t[c.key] && t[c.key] !== ""));
+
+  let html = '<table class="data-table txn-detail-table"><thead><tr>';
+  for (const col of activeCols) {
+    html += `<th${col.numeric ? ' class="num"' : ''}>${col.label}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  let totalDebit = 0, totalCredit = 0, totalAmount = 0;
+
+  for (const txn of txns) {
+    html += '<tr>';
+    for (const col of activeCols) {
+      let val = txn[col.key] || "";
+      if (col.numeric) {
+        const n = parseFloat(val) || 0;
+        if (col.key === "Debit") totalDebit += n;
+        if (col.key === "Credit") totalCredit += n;
+        if (col.key === "Amount") totalAmount += n;
+        html += `<td class="num">${val ? fmt(val) : ""}</td>`;
+      } else if (col.key === "Date" && val) {
+        // Format date nicely
+        try {
+          const d = new Date(val + "T00:00:00");
+          html += `<td style="white-space:nowrap;">${d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}</td>`;
+        } catch { html += `<td>${val}</td>`; }
+      } else {
+        html += `<td>${val}</td>`;
+      }
+    }
+    html += '</tr>';
+  }
+
+  // Footer totals
+  html += '<tr class="total-row"><td colspan="' + activeCols.filter(c => !c.numeric).length + '" style="text-align:right;font-weight:600;">Total (' + txns.length + ' transactions)</td>';
+  for (const col of activeCols) {
+    if (!col.numeric) continue;
+    if (col.key === "Debit") html += `<td class="num">${fmt(totalDebit)}</td>`;
+    else if (col.key === "Credit") html += `<td class="num">${fmt(totalCredit)}</td>`;
+    else if (col.key === "Amount") html += `<td class="num">${fmt(totalAmount)}</td>`;
+    else html += '<td></td>';
+  }
+  html += '</tr>';
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function exportTransactionDetail() {
+  if (!currentTxnDetail?.transactions?.length) { showToast("No data to export.", "warning"); return; }
+  const txns = currentTxnDetail.transactions;
+  const colMap = [
+    { key: "company", label: "Company" },
+    { key: "Date", label: "Date" },
+    { key: "Transaction Type", label: "Type" },
+    { key: "Num", label: "Ref #" },
+    { key: "Name", label: "Contact" },
+    { key: "Memo/Description", label: "Description" },
+    { key: "Account", label: "Account" },
+    { key: "Debit", label: "Debit" },
+    { key: "Credit", label: "Credit" },
+    { key: "Amount", label: "Net" },
+    { key: "Balance", label: "Balance" },
+  ];
+  const activeCols = colMap.filter(c => txns.some(t => t[c.key] && t[c.key] !== ""));
+  const rows = [activeCols.map(c => c.label)];
+  for (const txn of txns) {
+    rows.push(activeCols.map(c => txn[c.key] || ""));
+  }
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `TransactionDetail_${currentTxnDetail.account_name}_${new Date().toISOString().split("T")[0]}.csv`;
   a.click();
 }
 
