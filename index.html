@@ -178,10 +178,31 @@
 
     <!-- ======== DASHBOARD PAGE ======== -->
     <section id="page-dashboard" class="page-content active">
+      <div class="dashboard-period-bar">
+        <div class="filter-row" style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+          <label style="font-weight:600;font-size:var(--text-sm);color:var(--color-text-secondary);">Period</label>
+          <select id="dash-period" onchange="onDashPeriodChange()" style="min-width:200px;">
+            <option value="last_month" selected>Last Month</option>
+            <option value="ytd_last_month">Year to End of Last Month</option>
+            <option value="custom">Custom Date Range</option>
+          </select>
+          <div id="dash-custom-dates" style="display:none;align-items:center;gap:var(--space-2);">
+            <input type="date" id="dash-start-date" style="width:150px;">
+            <span style="color:var(--color-text-secondary);">to</span>
+            <input type="date" id="dash-end-date" style="width:150px;">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="loadDashboard()" style="padding:6px 16px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Refresh
+          </button>
+          <span id="dash-period-label" style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-left:auto;"></span>
+        </div>
+      </div>
+
       <div class="kpi-grid" id="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">Revenue (MTD)</div><div class="kpi-value" id="kpi-revenue">--</div><div class="kpi-delta neutral" id="kpi-revenue-delta">Loading...</div></div>
-        <div class="kpi-card"><div class="kpi-label">Expenses (MTD)</div><div class="kpi-value" id="kpi-expenses">--</div><div class="kpi-delta neutral" id="kpi-expenses-delta">Loading...</div></div>
-        <div class="kpi-card"><div class="kpi-label">Net Income (MTD)</div><div class="kpi-value" id="kpi-net-income">--</div><div class="kpi-delta neutral" id="kpi-net-delta">Loading...</div></div>
+        <div class="kpi-card"><div class="kpi-label" id="kpi-revenue-label">Revenue</div><div class="kpi-value" id="kpi-revenue">--</div><div class="kpi-delta neutral" id="kpi-revenue-delta">Loading...</div></div>
+        <div class="kpi-card"><div class="kpi-label" id="kpi-expenses-label">Expenses</div><div class="kpi-value" id="kpi-expenses">--</div><div class="kpi-delta neutral" id="kpi-expenses-delta">Loading...</div></div>
+        <div class="kpi-card"><div class="kpi-label" id="kpi-net-income-label">Net Income</div><div class="kpi-value" id="kpi-net-income">--</div><div class="kpi-delta neutral" id="kpi-net-delta">Loading...</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Assets</div><div class="kpi-value" id="kpi-assets">--</div><div class="kpi-delta neutral" id="kpi-assets-delta">&nbsp;</div></div>
         <div class="kpi-card"><div class="kpi-label">Connected Companies</div><div class="kpi-value" id="kpi-companies">1</div><div class="kpi-delta neutral">of 14 total</div></div>
       </div>

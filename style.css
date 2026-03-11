@@ -318,6 +318,33 @@ html, body {
   color: var(--color-text);
 }
 
+/* --- Dashboard Period Bar --- */
+.dashboard-period-bar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.dashboard-period-bar select,
+.dashboard-period-bar input[type="date"] {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+}
+
+.dashboard-period-bar .btn-sm {
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* --- KPI Cards --- */
 .kpi-grid {
   display: grid;

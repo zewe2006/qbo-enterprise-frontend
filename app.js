@@ -327,10 +327,36 @@ function applyDateMacro(prefix) {
 //  DASHBOARD
 // =====================================================================
 
+function onDashPeriodChange() {
+  const sel = document.getElementById("dash-period").value;
+  document.getElementById("dash-custom-dates").style.display = sel === "custom" ? "flex" : "none";
+}
+
 async function loadDashboard() {
+  const periodSel = document.getElementById("dash-period");
+  const period = periodSel ? periodSel.value : "last_month";
+  let url = `/api/dashboard/summary?period=${period}`;
+  if (period === "custom") {
+    const sd = document.getElementById("dash-start-date").value;
+    const ed = document.getElementById("dash-end-date").value;
+    if (sd && ed) url += `&start_date=${sd}&end_date=${ed}`;
+  }
+
+  // Show loading state on KPIs
+  ["kpi-revenue", "kpi-expenses", "kpi-net-income", "kpi-assets"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = "...";
+  });
+
   try {
-    const data = await apiGet("/api/dashboard/summary");
-    if (!data.error) { updateKPIs(data); updateCharts(data); }
+    const data = await apiGet(url);
+    if (!data.error) {
+      updateKPIs(data);
+      updateCharts(data);
+      // Show period label
+      const lbl = document.getElementById("dash-period-label");
+      if (lbl && data.period_label) lbl.textContent = data.period_label;
+    }
   } catch (e) { console.warn("Dashboard error:", e); }
 
   // Update company badge in header
@@ -362,27 +388,76 @@ function updateKPIs(data) {
     return "$" + n.toFixed(2);
   };
 
-  const cur = data.current_month_pl, last = data.last_month_pl;
+  const pLabel = data.period_label || "Last Month";
+  const cur = data.current_pl, prior = data.prior_pl;
   const rev = secTotal(cur, "Income"), exp = secTotal(cur, "Expenses");
   const net = (() => {
     if (!cur) return 0;
     try {
       for (const s of (cur.Rows || {}).Row || [])
-        if (s.Summary?.ColData?.length > 1) return parseFloat(s.Summary.ColData[1].value) || 0;
+        if (s.group === "NetIncome" && s.Summary?.ColData?.length > 1)
+          return parseFloat(s.Summary.ColData[1].value) || 0;
     } catch { /* */ }
     return 0;
   })();
-  const lastRev = secTotal(last, "Income");
+  const priorRev = secTotal(prior, "Income");
+
+  // Update KPI labels with period
+  const rl = document.getElementById("kpi-revenue-label");
+  const el2 = document.getElementById("kpi-expenses-label");
+  const nl = document.getElementById("kpi-net-income-label");
+  if (rl) rl.textContent = `Revenue`;
+  if (el2) el2.textContent = `Expenses`;
+  if (nl) nl.textContent = `Net Income`;
 
   document.getElementById("kpi-revenue").textContent = fmt(rev);
   document.getElementById("kpi-expenses").textContent = fmt(Math.abs(exp));
   document.getElementById("kpi-net-income").textContent = fmt(net);
 
-  if (lastRev && rev) {
-    const pct = ((rev - lastRev) / Math.abs(lastRev) * 100).toFixed(1);
-    const el = document.getElementById("kpi-revenue-delta");
-    el.className = `kpi-delta ${parseFloat(pct) >= 0 ? "positive" : "negative"}`;
-    el.textContent = `${parseFloat(pct) >= 0 ? "+" : ""}${pct}% vs last month`;
+  // Revenue delta vs prior period
+  const revDelta = document.getElementById("kpi-revenue-delta");
+  if (priorRev && rev) {
+    const pct = ((rev - priorRev) / Math.abs(priorRev) * 100).toFixed(1);
+    revDelta.className = `kpi-delta ${parseFloat(pct) >= 0 ? "positive" : "negative"}`;
+    revDelta.textContent = `${parseFloat(pct) >= 0 ? "+" : ""}${pct}% vs prior period`;
+  } else if (rev && !priorRev) {
+    revDelta.className = "kpi-delta neutral";
+    revDelta.textContent = "No prior period data";
+  } else {
+    revDelta.className = "kpi-delta neutral";
+    revDelta.textContent = "";
+  }
+
+  // Expenses delta
+  const priorExp = secTotal(prior, "Expenses");
+  const expDelta = document.getElementById("kpi-expenses-delta");
+  if (priorExp && exp) {
+    const pct = ((Math.abs(exp) - Math.abs(priorExp)) / Math.abs(priorExp) * 100).toFixed(1);
+    expDelta.className = `kpi-delta ${parseFloat(pct) <= 0 ? "positive" : "negative"}`;
+    expDelta.textContent = `${parseFloat(pct) >= 0 ? "+" : ""}${pct}% vs prior period`;
+  } else {
+    expDelta.className = "kpi-delta neutral";
+    expDelta.textContent = "";
+  }
+
+  // Net Income delta
+  const priorNet = (() => {
+    if (!prior) return 0;
+    try {
+      for (const s of (prior.Rows || {}).Row || [])
+        if (s.group === "NetIncome" && s.Summary?.ColData?.length > 1)
+          return parseFloat(s.Summary.ColData[1].value) || 0;
+    } catch { /* */ }
+    return 0;
+  })();
+  const netDelta = document.getElementById("kpi-net-delta");
+  if (priorNet && net) {
+    const pct = ((net - priorNet) / Math.abs(priorNet) * 100).toFixed(1);
+    netDelta.className = `kpi-delta ${parseFloat(pct) >= 0 ? "positive" : "negative"}`;
+    netDelta.textContent = `${parseFloat(pct) >= 0 ? "+" : ""}${pct}% vs prior period`;
+  } else {
+    netDelta.className = "kpi-delta neutral";
+    netDelta.textContent = "";
   }
 
   if (data.balance_sheet) {
@@ -414,7 +489,7 @@ function updateCharts(data) {
   const ec = document.getElementById("chart-expenses");
   if (ec) {
     if (chartInstances.expenses) chartInstances.expenses.destroy();
-    const cats = extractExpenseCategories(data.current_month_pl);
+    const cats = extractExpenseCategories(data.current_pl);
     chartInstances.expenses = new Chart(ec, {
       type: "doughnut",
       data: { labels: cats.map((c) => c.name), datasets: [{ data: cats.map((c) => Math.abs(c.value)), backgroundColor: colors, borderWidth: 0 }] },
