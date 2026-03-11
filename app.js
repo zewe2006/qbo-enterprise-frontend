@@ -978,12 +978,17 @@ function renderTransactionDetail(data) {
         if (col.key === "Credit") totalCredit += n;
         if (col.key === "Amount") totalAmount += n;
         html += `<td class="num">${val ? fmt(val) : ""}</td>`;
-      } else if (col.key === "Date" && val) {
-        // Format date nicely
-        try {
-          const d = new Date(val + "T00:00:00");
-          html += `<td style="white-space:nowrap;">${d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}</td>`;
-        } catch { html += `<td>${val}</td>`; }
+      } else if (col.key === "Date") {
+        // Format date nicely — empty dates are opening balances
+        if (!val || val === "") {
+          html += '<td style="white-space:nowrap;color:var(--color-text-muted);font-style:italic;">Opening Bal.</td>';
+        } else {
+          try {
+            const d = new Date(val + "T00:00:00");
+            if (isNaN(d.getTime())) { html += `<td>${val}</td>`; }
+            else { html += `<td style="white-space:nowrap;">${d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}</td>`; }
+          } catch { html += `<td>${val}</td>`; }
+        }
       } else {
         html += `<td>${val}</td>`;
       }
