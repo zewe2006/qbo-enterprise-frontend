@@ -534,6 +534,68 @@ html, body {
 .data-table .indent-1 td:first-child { padding-left: var(--space-8); }
 .data-table .indent-2 td:first-child { padding-left: var(--space-12); }
 
+/* --- By Company Table --- */
+.by-company-table {
+  font-size: 12px;
+}
+.by-company-table thead th {
+  font-size: 11px;
+  padding: 8px 6px;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.by-company-table thead th.acct-col {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--color-surface);
+  min-width: 200px;
+}
+.by-company-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+  min-width: 200px;
+  white-space: nowrap;
+}
+.by-company-table tbody tr:hover td:first-child {
+  background: #f0f5ff;
+}
+.by-company-table .co-col {
+  min-width: 100px;
+  max-width: 130px;
+}
+.by-company-table .total-col {
+  min-width: 110px;
+  background: #f0f4ff;
+  font-weight: 600;
+}
+.by-company-table .total-col-val {
+  background: #f0f4ff;
+  font-weight: 600;
+}
+.by-company-table tbody td {
+  padding: 5px 6px;
+}
+.by-company-table .section-header td {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+}
+.by-company-table .total-row td {
+  border-top: 2px solid var(--color-border);
+  font-weight: 600;
+}
+.by-company-table .total-row td:first-child {
+  background: #fff;
+}
+.by-company-table .total-row:hover td:first-child {
+  background: #f0f5ff;
+}
+
 /* --- Filter Bar --- */
 .filter-bar {
   display: flex;

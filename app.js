@@ -541,6 +541,8 @@ async function loadPL() {
 
   try {
     const sel = getSelectedCompanies("pl");
+    const viewEl = document.getElementById("pl-view-mode");
+    const byCompany = viewEl ? viewEl.value === "by_company" : false;
     const data = await apiPost("/api/reports/profit-loss", {
       start_date: document.getElementById("pl-start-date").value || null,
       end_date: document.getElementById("pl-end-date").value || null,
@@ -550,9 +552,14 @@ async function loadPL() {
       compare_prior_month: document.getElementById("pl-compare").value === "prior_month",
       company_id: sel.company_id,
       company_ids: sel.company_ids,
+      by_company: byCompany,
     });
     currentReportData.pl = data;
-    renderQBOReport(data, "pl-table-wrapper");
+    if (byCompany && data.company_breakdowns) {
+      renderByCompanyReport(data, "pl-table-wrapper");
+    } else {
+      renderQBOReport(data, "pl-table-wrapper");
+    }
     ld.classList.add("hidden"); wr.classList.remove("hidden");
   } catch (e) { ld.innerHTML = `<p style="color:var(--color-error);">Error: ${e.message}</p>`; }
 }
@@ -565,6 +572,8 @@ async function loadBS() {
 
   try {
     const sel = getSelectedCompanies("bs");
+    const viewEl = document.getElementById("bs-view-mode");
+    const byCompany = viewEl ? viewEl.value === "by_company" : false;
     const data = await apiPost("/api/reports/balance-sheet", {
       end_date: document.getElementById("bs-end-date").value || null,
       date_macro: document.getElementById("bs-date-macro").value || null,
@@ -572,9 +581,14 @@ async function loadBS() {
       compare_prior_year: document.getElementById("bs-compare").value === "prior_year",
       company_id: sel.company_id,
       company_ids: sel.company_ids,
+      by_company: byCompany,
     });
     currentReportData.bs = data;
-    renderQBOReport(data, "bs-table-wrapper");
+    if (byCompany && data.company_breakdowns) {
+      renderByCompanyReport(data, "bs-table-wrapper");
+    } else {
+      renderQBOReport(data, "bs-table-wrapper");
+    }
     ld.classList.add("hidden"); wr.classList.remove("hidden");
   } catch (e) { ld.innerHTML = `<p style="color:var(--color-error);">Error: ${e.message}</p>`; }
 }
@@ -587,6 +601,8 @@ async function loadCF() {
 
   try {
     const sel = getSelectedCompanies("cf");
+    const viewEl = document.getElementById("cf-view-mode");
+    const byCompany = viewEl ? viewEl.value === "by_company" : false;
     const data = await apiPost("/api/reports/cash-flow", {
       start_date: document.getElementById("cf-start-date").value || null,
       end_date: document.getElementById("cf-end-date").value || null,
@@ -594,9 +610,14 @@ async function loadCF() {
       compare_prior_year: document.getElementById("cf-compare").value === "prior_year",
       company_id: sel.company_id,
       company_ids: sel.company_ids,
+      by_company: byCompany,
     });
     currentReportData.cf = data;
-    renderQBOReport(data, "cf-table-wrapper");
+    if (byCompany && data.company_breakdowns) {
+      renderByCompanyReport(data, "cf-table-wrapper");
+    } else {
+      renderQBOReport(data, "cf-table-wrapper");
+    }
     ld.classList.add("hidden"); wr.classList.remove("hidden");
   } catch (e) { ld.innerHTML = `<p style="color:var(--color-error);">Error: ${e.message}</p>`; }
 }
@@ -676,10 +697,133 @@ function valRow(name, val, pv, hasCmp, cls) {
   return h + "</tr>";
 }
 
+// --- By Company Report Rendering ---
+function renderByCompanyReport(data, wrapperId) {
+  const wrapper = document.getElementById(wrapperId);
+  const current = data.current;
+  const breakdowns = data.company_breakdowns || {};
+  const companyNames = Object.keys(breakdowns);
+
+  if (!current || (!current.Rows && !current.rows)) {
+    wrapper.innerHTML = '<p class="text-muted" style="padding:var(--space-4);">No data returned.</p>';
+    return;
+  }
+
+  let top = "";
+  if (data.consolidated) {
+    top += `<div class="consolidated-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M7 7V3h10v4M7 11h2M7 15h2M15 11h2M15 15h2M11 21v-4h2v4"/></svg> By Company Report \u2014 ${companyNames.length} companies</div>`;
+  }
+
+  // Shorten company names for column headers
+  const shortName = (n) => {
+    return n.replace(/ (LLC|INC|Inc|inc|llc|Group)$/i, "").replace(/^Sweet Hut /, "SH ").replace(/^Food Terminal /, "FT ");
+  };
+
+  const colCount = companyNames.length + 2; // Account + each company + Total
+  const rows = current.Rows || current.rows || {};
+  const headerRow = rows.Row || [];
+
+  let html = top + '<table class="data-table by-company-table"><thead><tr><th class="acct-col">Account</th>';
+  for (const cn of companyNames) {
+    html += `<th class="num co-col" title="${cn}">${shortName(cn)}</th>`;
+  }
+  html += '<th class="num total-col">Total</th></tr></thead><tbody>';
+  html += renderByCompanyRows(headerRow, 0, breakdowns, companyNames, colCount);
+  html += "</tbody></table>";
+  wrapper.innerHTML = html;
+}
+
+function renderByCompanyRows(arr, depth, breakdowns, companyNames, colCount) {
+  let h = "";
+  const f = (n) => n === 0 ? "$0.00" : (n < 0 ? "\u2212" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  for (const r of arr) {
+    if (r.type === "Section" || r.group) {
+      // Section header
+      if (r.Header?.ColData) {
+        h += `<tr class="section-header"><td colspan="${colCount}">${r.Header.ColData[0]?.value || ""}</td></tr>`;
+      }
+      // Sub-rows
+      if (r.Rows?.Row) {
+        h += renderByCompanyRows(r.Rows.Row, depth + 1, breakdowns, companyNames, colCount);
+      }
+      // Summary / total row
+      if (r.Summary?.ColData) {
+        const name = r.Summary.ColData[0]?.value || "Total";
+        const totalVal = parseFloat(r.Summary.ColData[1]?.value) || 0;
+        const cls = "total-row";
+        h += `<tr class="${cls}"><td>${name}</td>`;
+        for (const cn of companyNames) {
+          const cv = (breakdowns[cn] || {})[name] || (breakdowns[cn] || {})[r.Header?.ColData?.[0]?.value || ""] || 0;
+          h += `<td class="num">${f(cv)}</td>`;
+        }
+        h += `<td class="num total-col-val">${f(totalVal)}</td></tr>`;
+      }
+    } else if (r.ColData) {
+      const name = r.ColData[0]?.value || "";
+      const totalVal = parseFloat(r.ColData[1]?.value) || 0;
+      const cls = depth > 0 ? `indent-${Math.min(depth, 2)}` : "";
+      h += `<tr class="${cls}"><td>${name}</td>`;
+      for (const cn of companyNames) {
+        const cv = (breakdowns[cn] || {})[name] || 0;
+        h += `<td class="num">${f(cv)}</td>`;
+      }
+      h += `<td class="num total-col-val">${f(totalVal)}</td></tr>`;
+    }
+  }
+  return h;
+}
+
 // --- Export ---
 function exportReport(type) {
   const data = currentReportData[type];
   if (!data?.current) { showToast("Run the report first.", "warning"); return; }
+
+  // Check if this is a by-company view
+  const viewEl = document.getElementById(`${type}-view-mode`);
+  const isByCompany = viewEl && viewEl.value === "by_company" && data.company_breakdowns;
+
+  if (isByCompany) {
+    const breakdowns = data.company_breakdowns;
+    const companyNames = Object.keys(breakdowns);
+    const header = ["Account", ...companyNames, "Total"];
+    const rows = [header];
+    (function walk(arr, d) {
+      for (const r of arr) {
+        if (r.type === "Section" || r.group) {
+          if (r.Header?.ColData) {
+            const row = [r.Header.ColData[0]?.value || ""];
+            for (let i = 0; i < companyNames.length + 1; i++) row.push("");
+            rows.push(row);
+          }
+          if (r.Rows?.Row) walk(r.Rows.Row, d + 1);
+          if (r.Summary?.ColData) {
+            const name = r.Summary.ColData[0]?.value || "Total";
+            const totalVal = r.Summary.ColData[1]?.value || "0";
+            const row = ["  " + name];
+            for (const cn of companyNames) row.push(String((breakdowns[cn] || {})[name] || 0));
+            row.push(totalVal);
+            rows.push(row);
+          }
+        } else if (r.ColData) {
+          const name = r.ColData[0]?.value || "";
+          const totalVal = r.ColData[1]?.value || "0";
+          const row = ["  ".repeat(d) + name];
+          for (const cn of companyNames) row.push(String((breakdowns[cn] || {})[name] || 0));
+          row.push(totalVal);
+          rows.push(row);
+        }
+      }
+    })(data.current.Rows?.Row || [], 0);
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${{ pl: "ProfitAndLoss", bs: "BalanceSheet", cf: "CashFlow" }[type] || "Report"}_ByCompany_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    return;
+  }
+
   const rows = [["Account", "Amount"]];
   (function walk(arr, d) {
     for (const r of arr) {

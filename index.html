@@ -297,6 +297,13 @@
             <option value="prior_month">vs. Prior Month</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label>View</label>
+          <select id="pl-view-mode">
+            <option value="consolidated">Consolidated</option>
+            <option value="by_company">By Company</option>
+          </select>
+        </div>
         <button class="btn btn-primary" onclick="loadPL()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
           Run Report
@@ -355,6 +362,13 @@
             <option value="prior_year">vs. Prior Year</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label>View</label>
+          <select id="bs-view-mode">
+            <option value="consolidated">Consolidated</option>
+            <option value="by_company">By Company</option>
+          </select>
+        </div>
         <button class="btn btn-primary" onclick="loadBS()">Run Report</button>
         <button class="btn btn-secondary" onclick="exportReport('bs')">Export CSV</button>
       </div>
@@ -403,6 +417,13 @@
           <select id="cf-compare">
             <option value="">No Comparison</option>
             <option value="prior_year">vs. Prior Year</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>View</label>
+          <select id="cf-view-mode">
+            <option value="consolidated">Consolidated</option>
+            <option value="by_company">By Company</option>
           </select>
         </div>
         <button class="btn btn-primary" onclick="loadCF()">Run Report</button>
