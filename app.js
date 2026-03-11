@@ -165,9 +165,16 @@ function populateCompanySelectors() {
     if (prevDest) destEl.value = prevDest;
     // Auto-load accounts for the selected companies
     icAccountsCache = {};
-    loadICAccountsFor("source");
-    loadICAccountsFor("dest");
+    loadICAccountsFor("source").then(() => { if (!document.querySelectorAll("#ic-source-lines tr").length) addDefaultICLines("source"); });
+    loadICAccountsFor("dest").then(() => { if (!document.querySelectorAll("#ic-dest-lines tr").length) addDefaultICLines("dest"); });
   }
+}
+
+function addDefaultICLines(side, count) {
+  const n = count || 4;
+  const tbody = document.getElementById(`ic-${side}-lines`);
+  if (!tbody) return;
+  for (let i = 0; i < n; i++) addICLine(side);
 }
 
 // --- Multi-select helpers ---
@@ -1073,9 +1080,10 @@ function getICLines(side) {
   return lines;
 }
 
-function clearICLines(side) {
+function clearICLines(side, noDefaults) {
   document.getElementById(`ic-${side}-lines`).innerHTML = "";
   updateICBalance(side);
+  if (!noDefaults) addDefaultICLines(side);
 }
 
 async function onLineAccountChange(selectEl, side, idx) {
@@ -1138,8 +1146,8 @@ function populateICForm(e, options) {
     dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }
 
-  clearICLines("source");
-  clearICLines("dest");
+  clearICLines("source", true);
+  clearICLines("dest", true);
 
   setTimeout(() => {
     if (e.lines && e.lines.length) {
@@ -1321,8 +1329,8 @@ function useTemplate(templateId) {
   const dateEl = document.getElementById("ic-date");
   if (dateEl) dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  clearICLines("source");
-  clearICLines("dest");
+  clearICLines("source", true);
+  clearICLines("dest", true);
 
   // Populate lines from template (legacy single-line templates)
   setTimeout(() => {

@@ -1136,20 +1136,30 @@ html, body {
   border-collapse: collapse;
 }
 .ic-je-table thead th {
-  padding: var(--space-2) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   border-bottom: 2px solid var(--color-border);
   text-align: left;
   white-space: nowrap;
+  background: var(--color-surface-secondary);
+}
+.ic-je-table thead th.ic-je-col-amount {
+  background: rgba(0, 0, 0, 0.04);
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 12px;
+}
+.ic-je-table thead th.ic-je-col-desc {
+  border-left: 1px solid var(--color-border);
 }
 .ic-je-col-num { width: 40px; text-align: center !important; }
 .ic-je-col-account { width: auto; }
-.ic-je-col-amount { width: 130px; text-align: right !important; }
-.ic-je-col-desc { width: 200px; }
+.ic-je-col-amount { width: 140px; text-align: right !important; }
+.ic-je-col-desc { width: 220px; }
 .ic-je-col-action { width: 36px; }
 .ic-je-table tbody tr {
   border-bottom: 1px dashed var(--color-border);
