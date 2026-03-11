@@ -1541,7 +1541,7 @@ async function loadICTemplates() {
       const srcAccts = [t.source_debit_account, t.source_credit_account].filter(Boolean).join(" / ") || "-";
       const destAccts = [t.dest_debit_account, t.dest_credit_account].filter(Boolean).join(" / ") || "-";
       html += `<tr><td><strong>${t.name}</strong></td><td>${typeLabel}</td><td style="font-size:var(--text-xs);">${srcAccts}</td><td style="font-size:var(--text-xs);">${destAccts}</td><td>${t.description || "-"}</td>`;
-      html += `<td style="display:flex;gap:var(--space-2);"><button class="btn btn-sm btn-primary" onclick="useTemplate('${t.id}')">Use</button><button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteTemplate('${t.id}')">&times;</button></td></tr>`;
+      html += `<td style="display:flex;gap:var(--space-2);"><button class="btn btn-sm btn-primary" onclick="useTemplate('${t.id}')">Use</button><button class="btn btn-sm btn-secondary" onclick="editTemplate('${t.id}')">Edit</button><button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteTemplate('${t.id}')">&times;</button></td></tr>`;
     }
     el.innerHTML = html + "</tbody></table>";
   } catch { /* ok */ }
@@ -1593,6 +1593,107 @@ async function deleteTemplate(templateId) {
   try {
     await apiDelete(`/api/intercompany/templates/${templateId}`);
     showToast("Template deleted.", "success");
+    loadICTemplates();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
+}
+
+// --- Edit Template ---
+let editTplAccountsCache = {};
+
+async function editTemplate(templateId) {
+  const t = allTemplates.find((tpl) => tpl.id === templateId);
+  if (!t) { showToast("Template not found.", "error"); return; }
+
+  document.getElementById("edit-tpl-id").value = t.id;
+  document.getElementById("edit-tpl-name").value = t.name || "";
+  document.getElementById("edit-tpl-type").value = t.entry_type || "";
+  document.getElementById("edit-tpl-description").value = t.description || "";
+
+  // Populate company dropdowns
+  const srcSel = document.getElementById("edit-tpl-source-company");
+  const destSel = document.getElementById("edit-tpl-dest-company");
+  let opts = '<option value="">-- Select --</option>';
+  for (const c of allCompanies.filter((co) => co.status === "connected")) {
+    opts += `<option value="${c.id}">${c.name}</option>`;
+  }
+  srcSel.innerHTML = opts;
+  destSel.innerHTML = opts;
+
+  srcSel.value = t.source_company_id || "";
+  destSel.value = t.dest_company_id || "";
+
+  // Load accounts for selected companies, then set values
+  editTplAccountsCache = {};
+  await Promise.all([
+    t.source_company_id ? loadEditTplAccounts("source", false) : Promise.resolve(),
+    t.dest_company_id ? loadEditTplAccounts("dest", false) : Promise.resolve(),
+  ]);
+
+  // Set account values after dropdowns are populated
+  setTimeout(() => {
+    if (t.source_debit_account) document.getElementById("edit-tpl-source-debit").value = t.source_debit_account;
+    if (t.source_credit_account) document.getElementById("edit-tpl-source-credit").value = t.source_credit_account;
+    if (t.dest_debit_account) document.getElementById("edit-tpl-dest-debit").value = t.dest_debit_account;
+    if (t.dest_credit_account) document.getElementById("edit-tpl-dest-credit").value = t.dest_credit_account;
+  }, 100);
+
+  // Show modal
+  document.getElementById("edit-template-modal").classList.add("active");
+}
+
+async function loadEditTplAccounts(side, clear = true) {
+  const companyId = document.getElementById(side === "source" ? "edit-tpl-source-company" : "edit-tpl-dest-company").value;
+  const debitSel = document.getElementById(side === "source" ? "edit-tpl-source-debit" : "edit-tpl-dest-debit");
+  const creditSel = document.getElementById(side === "source" ? "edit-tpl-source-credit" : "edit-tpl-dest-credit");
+  const empty = '<option value="">-- Select --</option>';
+  if (!companyId) {
+    debitSel.innerHTML = '<option value="">-- Select company first --</option>';
+    creditSel.innerHTML = '<option value="">-- Select company first --</option>';
+    return;
+  }
+
+  let accounts = editTplAccountsCache[companyId];
+  if (!accounts) {
+    try {
+      accounts = await apiGet(`/api/accounts/cached?company_id=${companyId}`);
+      editTplAccountsCache[companyId] = accounts;
+    } catch {
+      debitSel.innerHTML = '<option value="">Error loading</option>';
+      creditSel.innerHTML = '<option value="">Error loading</option>';
+      return;
+    }
+  }
+
+  let opts = empty;
+  for (const a of accounts) {
+    const indent = a.sub_account ? "\u00A0\u00A0\u00A0" : "";
+    opts += `<option value="${a.name}">${indent}${a.name}</option>`;
+  }
+  debitSel.innerHTML = opts;
+  creditSel.innerHTML = opts;
+}
+
+async function saveTemplateEdit() {
+  const tid = document.getElementById("edit-tpl-id").value;
+  const name = document.getElementById("edit-tpl-name").value.trim();
+  if (!name) { showToast("Template name is required.", "warning"); return; }
+
+  try {
+    await apiPut(`/api/intercompany/templates/${tid}`, {
+      name,
+      source_company_id: document.getElementById("edit-tpl-source-company").value || null,
+      dest_company_id: document.getElementById("edit-tpl-dest-company").value || null,
+      entry_type: document.getElementById("edit-tpl-type").value || null,
+      source_debit_account: document.getElementById("edit-tpl-source-debit").value || null,
+      source_credit_account: document.getElementById("edit-tpl-source-credit").value || null,
+      dest_debit_account: document.getElementById("edit-tpl-dest-debit").value || null,
+      dest_credit_account: document.getElementById("edit-tpl-dest-credit").value || null,
+      description: document.getElementById("edit-tpl-description").value || null,
+    });
+    showToast("Template updated.", "success");
+    closeModal("edit-template-modal");
     loadICTemplates();
   } catch (e) {
     showToast("Error: " + e.message, "error");

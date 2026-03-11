@@ -786,6 +786,72 @@
   </div>
 </div>
 
+<!-- ======== MODAL: Edit Template ======== -->
+<div id="edit-template-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:620px;">
+    <div class="modal-header">
+      <h3>Edit Template</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('edit-template-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4);">
+      <input type="hidden" id="edit-tpl-id">
+      <div class="form-group">
+        <label class="form-label">Template Name</label>
+        <input class="form-input" type="text" id="edit-tpl-name">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Source Company</label>
+          <select class="form-select" id="edit-tpl-source-company" onchange="loadEditTplAccounts('source')"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Destination Company</label>
+          <select class="form-select" id="edit-tpl-dest-company" onchange="loadEditTplAccounts('dest')"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Entry Type</label>
+        <select class="form-select" id="edit-tpl-type">
+          <option value="">-- Select --</option>
+          <option value="expense_reimbursement">Expense Reimbursement</option>
+          <option value="revenue_share">Revenue Share</option>
+          <option value="loan">Loan / Advance</option>
+          <option value="management_fee">Management Fee</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Source Debit Account</label>
+          <select class="form-select" id="edit-tpl-source-debit"><option value="">-- Select company first --</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Source Credit Account</label>
+          <select class="form-select" id="edit-tpl-source-credit"><option value="">-- Select company first --</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Dest Debit Account</label>
+          <select class="form-select" id="edit-tpl-dest-debit"><option value="">-- Select company first --</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dest Credit Account</label>
+          <select class="form-select" id="edit-tpl-dest-credit"><option value="">-- Select company first --</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input class="form-input" type="text" id="edit-tpl-description">
+      </div>
+      <div style="display:flex;gap:var(--space-3);margin-top:var(--space-4);">
+        <button class="btn btn-primary" onclick="saveTemplateEdit()">Save Changes</button>
+        <button class="btn btn-ghost" onclick="closeModal('edit-template-modal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ======== MODAL: Company Accounts ======== -->
 <div id="company-accounts-modal" class="modal-overlay">
   <div class="modal-content">
