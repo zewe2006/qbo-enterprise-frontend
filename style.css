@@ -784,6 +784,10 @@ html, body {
 .app-footer a:hover {
   color: var(--sidebar-text);
 }
+.app-footer .support-link {
+  display: block;
+  margin-bottom: var(--space-1);
+}
 
 /* --- Responsive --- */
 @media (max-width: 1024px) {
