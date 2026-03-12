@@ -157,6 +157,8 @@ function showApp() {
   // Show/hide admin-only nav items
   const navUsers = document.getElementById("nav-users");
   if (navUsers) navUsers.style.display = currentUser.role === "admin" ? "" : "none";
+  const navBilling = document.getElementById("nav-billing");
+  if (navBilling) navBilling.style.display = currentUser.role === "admin" ? "" : "none";
   applyRoleRestrictions();
   initDefaultDates();
   loadCompanyList();
@@ -371,6 +373,7 @@ function navigateTo(page) {
     companies: "Company Management",
     "account-mapping": "Account Mapping",
     users: "User Management",
+    billing: "Billing & Subscription",
   };
   // Block non-admin from users page
   if (page === "users" && currentUser && currentUser.role !== "admin") {
@@ -382,6 +385,7 @@ function navigateTo(page) {
   if (page === "intercompany") loadICHistory();
   if (page === "account-mapping") loadAccountMappings();
   if (page === "users") loadUsers();
+  if (page === "billing") loadBilling();
 }
 
 window.addEventListener("hashchange", () => {
@@ -2264,6 +2268,119 @@ async function deleteUser(userId, email) {
     showToast("Error: " + e.message, "error");
   }
 }
+
+// =====================================================================
+//  BILLING
+// =====================================================================
+
+async function loadBilling() {
+  try {
+    const res = await fetch(`${API_BASE}/api/billing/subscription`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) throw new Error("Failed to load billing");
+    const data = await res.json();
+
+    const planName = document.getElementById("billing-plan-name");
+    const planPrice = document.getElementById("billing-plan-price");
+    const planStatus = document.getElementById("billing-plan-status");
+    const compLimit = document.getElementById("billing-company-limit");
+    const compUsage = document.getElementById("billing-company-usage");
+    const upgradeCard = document.getElementById("billing-upgrade-card");
+    const manageCard = document.getElementById("billing-manage-card");
+
+    if (data.plan === "business") {
+      planName.textContent = "Business";
+      planPrice.textContent = "$49 / month";
+      const statusText = data.subscription_status === "active" ? "Active" : data.subscription_status === "past_due" ? "Past Due" : data.subscription_status;
+      const statusColor = data.subscription_status === "active" ? "#059669" : "#dc2626";
+      planStatus.innerHTML = `<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:${statusColor}15;color:${statusColor};">${statusText}</span>`;
+      upgradeCard.style.display = "none";
+      manageCard.style.display = "block";
+    } else {
+      planName.textContent = "Starter";
+      planPrice.textContent = "Free";
+      planStatus.innerHTML = '<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#dbeafe;color:#1d4ed8;">Free Plan</span>';
+      upgradeCard.style.display = "block";
+      manageCard.style.display = "none";
+    }
+
+    compLimit.textContent = data.max_companies + " companies";
+    // Count connected companies
+    try {
+      const compRes = await fetch(`${API_BASE}/api/companies`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (compRes.ok) {
+        const companies = await compRes.json();
+        const connected = companies.filter(c => c.status === "connected").length;
+        compUsage.textContent = `${connected} connected of ${data.max_companies} max`;
+      }
+    } catch (e) { /* ignore */ }
+  } catch (err) {
+    console.error("loadBilling error:", err);
+    document.getElementById("billing-plan-name").textContent = "Error loading";
+  }
+}
+
+async function startCheckout() {
+  const btn = document.getElementById("btn-upgrade");
+  btn.disabled = true;
+  btn.textContent = "Redirecting...";
+  try {
+    const res = await fetch(`${API_BASE}/api/billing/create-checkout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Failed to create checkout session");
+      btn.disabled = false;
+      btn.textContent = "Upgrade Now";
+      return;
+    }
+    const data = await res.json();
+    window.location.href = data.checkout_url;
+  } catch (err) {
+    alert("Error: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Upgrade Now";
+  }
+}
+
+async function openBillingPortal() {
+  try {
+    const res = await fetch(`${API_BASE}/api/billing/portal`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Failed to open billing portal");
+      return;
+    }
+    const data = await res.json();
+    window.open(data.portal_url, "_blank");
+  } catch (err) {
+    alert("Error: " + err.message);
+  }
+}
+
+// Check for billing success/cancel in URL
+(function checkBillingReturn() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("billing") === "success") {
+    setTimeout(() => {
+      alert("Subscription activated! Welcome to the Business plan.");
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+      if (authToken) loadBilling();
+    }, 500);
+  } else if (params.get("billing") === "canceled") {
+    setTimeout(() => {
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    }, 100);
+  }
+})();
 
 // --- Init ---
 document.getElementById("login-password").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
