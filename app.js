@@ -2317,7 +2317,7 @@ async function deleteUser(userId, email) {
 
 async function loadBilling() {
   try {
-    const res = await fetch(`${API_BASE}/api/billing/subscription`, {
+    const res = await fetch(`${API}/api/billing/subscription`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error("Failed to load billing");
@@ -2358,7 +2358,7 @@ async function loadBilling() {
     compLimit.textContent = data.max_companies + " companies";
     // Count connected companies
     try {
-      const compRes = await fetch(`${API_BASE}/api/companies`, {
+      const compRes = await fetch(`${API}/api/companies`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
       if (compRes.ok) {
@@ -2378,7 +2378,7 @@ async function startCheckout() {
   btn.disabled = true;
   btn.textContent = "Redirecting...";
   try {
-    const res = await fetch(`${API_BASE}/api/billing/create-checkout`, {
+    const res = await fetch(`${API}/api/billing/create-checkout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
     });
@@ -2400,7 +2400,7 @@ async function startCheckout() {
 
 async function openBillingPortal() {
   try {
-    const res = await fetch(`${API_BASE}/api/billing/portal`, {
+    const res = await fetch(`${API}/api/billing/portal`, {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
     });
