@@ -424,6 +424,7 @@ function navigateTo(page) {
     "account-mapping": "Account Mapping",
     users: "User Management",
     billing: "Billing & Subscription",
+    "knowledge-base": "AI Knowledge Base",
   };
   // Block non-admin from users page
   if (page === "users" && currentUser && currentUser.role !== "admin") {
