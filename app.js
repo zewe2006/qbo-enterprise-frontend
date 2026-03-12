@@ -142,6 +142,9 @@ function doLogout() {
   currentUser = null;
   document.getElementById("app-shell").classList.add("hidden");
   document.getElementById("login-page").style.display = "flex";
+  // Hide chat widget
+  const chatWidget = document.getElementById("chat-widget");
+  if (chatWidget) { chatWidget.style.display = "none"; chatOpen = false; }
 }
 
 function showApp() {
@@ -165,6 +168,9 @@ function showApp() {
   loadCompanyList();
   navigateTo(location.hash.slice(1) || "dashboard");
   loadDashboard();
+  // Show chat widget
+  const chatWidget = document.getElementById("chat-widget");
+  if (chatWidget) chatWidget.style.display = "block";
 }
 
 function applyRoleRestrictions() {
@@ -2439,3 +2445,226 @@ async function openBillingPortal() {
 // --- Init ---
 document.getElementById("login-password").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
 document.getElementById("login-email").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+
+// =====================================================================
+//  AI CHAT ASSISTANT
+// =====================================================================
+
+let chatOpen = false;
+let chatConversation = []; // {role, content}
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  const win = document.getElementById("chat-window");
+  const iconOpen = document.getElementById("chat-icon-open");
+  const iconClose = document.getElementById("chat-icon-close");
+  win.style.display = chatOpen ? "flex" : "none";
+  iconOpen.style.display = chatOpen ? "none" : "block";
+  iconClose.style.display = chatOpen ? "block" : "none";
+  if (chatOpen) {
+    document.getElementById("chat-input").focus();
+    const msgs = document.getElementById("chat-messages");
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+}
+
+function clearChat() {
+  chatConversation = [];
+  const msgs = document.getElementById("chat-messages");
+  msgs.innerHTML = `<div class="chat-msg assistant">
+    <div style="background:var(--color-bg-muted);padding:10px 14px;border-radius:12px 12px 12px 4px;font-size:13px;line-height:1.5;max-width:85%;color:var(--color-text-primary);">
+      Hi! I can help you with:<br>
+      <strong>&#8226;</strong> Create intercompany journal entries<br>
+      <strong>&#8226;</strong> Pull P&L, Balance Sheet, or Cash Flow reports<br>
+      <strong>&#8226;</strong> Analyze financial data across companies<br>
+      <strong>&#8226;</strong> Navigate the app<br><br>
+      What would you like to do?
+    </div>
+  </div>`;
+}
+
+function appendChatMsg(role, html) {
+  const msgs = document.getElementById("chat-messages");
+  const align = role === "user" ? "flex-end" : "flex-start";
+  const bg = role === "user" ? "#1a56db" : "var(--color-bg-muted)";
+  const color = role === "user" ? "white" : "var(--color-text-primary)";
+  const radius = role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px";
+  const div = document.createElement("div");
+  div.className = `chat-msg ${role}`;
+  div.style.cssText = `display:flex;justify-content:${align};`;
+  div.innerHTML = `<div style="background:${bg};color:${color};padding:10px 14px;border-radius:${radius};font-size:13px;line-height:1.5;max-width:85%;word-wrap:break-word;">${html}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function showChatTyping() {
+  const msgs = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.id = "chat-typing";
+  div.className = "chat-msg assistant";
+  div.innerHTML = `<div style="background:var(--color-bg-muted);padding:10px 14px;border-radius:12px 12px 12px 4px;font-size:13px;color:var(--color-text-secondary);">
+    <span style="display:inline-flex;gap:4px;"><span class="typing-dot">&#9679;</span><span class="typing-dot" style="animation-delay:0.2s;">&#9679;</span><span class="typing-dot" style="animation-delay:0.4s;">&#9679;</span></span>
+  </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeChatTyping() {
+  const el = document.getElementById("chat-typing");
+  if (el) el.remove();
+}
+
+async function sendChat() {
+  const input = document.getElementById("chat-input");
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = "";
+
+  // Show user message
+  appendChatMsg("user", escapeHtml(msg));
+  chatConversation.push({ role: "user", content: msg });
+
+  // Show typing indicator
+  showChatTyping();
+  const sendBtn = document.getElementById("chat-send-btn");
+  sendBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ message: msg, conversation: chatConversation.slice(-10) }),
+    });
+
+    removeChatTyping();
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      appendChatMsg("assistant", `<span style="color:var(--color-error);">${escapeHtml(err.detail || "Something went wrong. Please try again.")}</span>`);
+      sendBtn.disabled = false;
+      return;
+    }
+
+    const data = await res.json();
+    const reply = data.reply;
+    chatConversation.push({ role: "assistant", content: reply });
+
+    // Parse and render the reply, handling action blocks
+    const rendered = renderChatReply(reply);
+    appendChatMsg("assistant", rendered);
+
+  } catch (e) {
+    removeChatTyping();
+    appendChatMsg("assistant", `<span style="color:var(--color-error);">Connection error. Please try again.</span>`);
+  }
+
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function renderChatReply(reply) {
+  // Parse action blocks
+  let html = reply;
+
+  // Handle ```action:create_je blocks
+  html = html.replace(/```action:create_je\n([\s\S]*?)```/g, (match, json) => {
+    try {
+      const je = JSON.parse(json.trim());
+      return `<div style="margin:8px 0;padding:10px;background:var(--color-bg-elevated);border:1px solid var(--color-border);border-radius:8px;">
+        <div style="font-weight:600;font-size:12px;color:var(--color-accent);margin-bottom:6px;">&#9998; Journal Entry Ready</div>
+        <div style="font-size:12px;margin-bottom:4px;"><strong>Type:</strong> ${escapeHtml(je.entry_type || '')}</div>
+        <div style="font-size:12px;margin-bottom:4px;"><strong>Amount:</strong> $${(je.amount || 0).toLocaleString()}</div>
+        <div style="font-size:12px;margin-bottom:4px;"><strong>Date:</strong> ${escapeHtml(je.date || '')}</div>
+        <div style="font-size:12px;margin-bottom:8px;"><strong>Description:</strong> ${escapeHtml(je.description || '')}</div>
+        <button onclick='executeChatJE(${escapeHtml(JSON.stringify(json.trim()))})' style="padding:6px 14px;background:#1a56db;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Create This Entry</button>
+      </div>`;
+    } catch (e) {
+      return `<pre style="font-size:11px;overflow-x:auto;">${escapeHtml(json)}</pre>`;
+    }
+  });
+
+  // Handle ```action:show_report blocks
+  html = html.replace(/```action:show_report\n([\s\S]*?)```/g, (match, json) => {
+    try {
+      const rpt = JSON.parse(json.trim());
+      const label = { "profit-loss": "P&L", "balance-sheet": "Balance Sheet", "cash-flow": "Cash Flow" }[rpt.report_type] || rpt.report_type;
+      return `<div style="margin:8px 0;">
+        <button onclick='executeChatReport(${escapeHtml(JSON.stringify(json.trim()))})' style="padding:8px 16px;background:var(--color-accent);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">&#128202; Open ${escapeHtml(label)} Report</button>
+      </div>`;
+    } catch (e) {
+      return match;
+    }
+  });
+
+  // Handle ```action:navigate blocks
+  html = html.replace(/```action:navigate\n([\s\S]*?)```/g, (match, json) => {
+    try {
+      const nav = JSON.parse(json.trim());
+      return `<div style="margin:8px 0;">
+        <button onclick="navigateTo('${escapeHtml(nav.page)}')" style="padding:8px 16px;background:var(--color-accent);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">&#8594; Go to ${escapeHtml(nav.page)}</button>
+      </div>`;
+    } catch (e) {
+      return match;
+    }
+  });
+
+  // Convert markdown bold
+  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  // Convert newlines to <br>
+  html = html.replace(/\n/g, "<br>");
+
+  return html;
+}
+
+async function executeChatJE(jsonStr) {
+  try {
+    const je = JSON.parse(jsonStr);
+    const res = await fetch(`${API}/api/intercompany`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify(je),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      appendChatMsg("assistant", `<span style="color:var(--color-error);">Failed to create entry: ${escapeHtml(err.detail || "Unknown error")}</span>`);
+      return;
+    }
+    const data = await res.json();
+    appendChatMsg("assistant", `<div style="color:var(--color-success);font-weight:600;">&#10003; Journal entry created successfully! (ID: ${data.id.slice(0,8)}...)</div><div style="margin-top:4px;"><button onclick="navigateTo('intercompany')" style="padding:6px 14px;background:var(--color-accent);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;">View in Journal Entries</button></div>`);
+  } catch (e) {
+    appendChatMsg("assistant", `<span style="color:var(--color-error);">Error: ${escapeHtml(e.message)}</span>`);
+  }
+}
+
+function executeChatReport(jsonStr) {
+  try {
+    const rpt = JSON.parse(jsonStr);
+    const pageMap = { "profit-loss": "profit-loss", "balance-sheet": "balance-sheet", "cash-flow": "cash-flow" };
+    const page = pageMap[rpt.report_type] || "profit-loss";
+    navigateTo(page);
+    // Could also pre-fill date selectors here in future
+  } catch (e) {
+    console.error("executeChatReport error:", e);
+  }
+}
+
+// Add typing animation CSS
+(function addChatStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    .typing-dot { animation: typingBounce 1.2s infinite; font-size: 8px; }
+    @keyframes typingBounce { 0%,60%,100% { opacity: 0.3; } 30% { opacity: 1; } }
+    #chat-widget { display: none; }
+    @media (max-width: 640px) {
+      #chat-window { width: calc(100vw - 20px) !important; right: -10px !important; height: calc(100vh - 140px) !important; bottom: 65px !important; }
+    }
+  `;
+  document.head.appendChild(style);
+})();

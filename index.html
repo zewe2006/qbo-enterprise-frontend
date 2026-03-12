@@ -999,6 +999,48 @@
   </div>
 </div>
 
+<!-- ======== AI CHAT WIDGET ======== -->
+<div id="chat-widget" style="position:fixed;bottom:20px;right:20px;z-index:1000;">
+  <!-- Chat Bubble -->
+  <button id="chat-bubble" onclick="toggleChat()" style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#1a56db,#2563eb);color:white;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(26,86,219,0.4);display:flex;align-items:center;justify-content:center;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+    <svg id="chat-icon-open" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <svg id="chat-icon-close" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+
+  <!-- Chat Window -->
+  <div id="chat-window" style="display:none;position:absolute;bottom:70px;right:0;width:400px;max-width:calc(100vw - 40px);height:520px;max-height:calc(100vh - 120px);background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.15);flex-direction:column;overflow:hidden;">
+    <!-- Header -->
+    <div style="padding:16px 20px;background:linear-gradient(135deg,#1a56db,#2563eb);color:white;display:flex;align-items:center;gap:12px;flex-shrink:0;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
+      <div>
+        <div style="font-weight:600;font-size:14px;">AI Assistant</div>
+        <div style="font-size:11px;opacity:0.8;">Ask about reports, journal entries, or data</div>
+      </div>
+      <button onclick="clearChat()" style="margin-left:auto;background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;">Clear</button>
+    </div>
+
+    <!-- Messages -->
+    <div id="chat-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div class="chat-msg assistant">
+        <div style="background:var(--color-bg-muted);padding:10px 14px;border-radius:12px 12px 12px 4px;font-size:13px;line-height:1.5;max-width:85%;color:var(--color-text-primary);">
+          Hi! I can help you with:<br>
+          <strong>&#8226;</strong> Create intercompany journal entries<br>
+          <strong>&#8226;</strong> Pull P&L, Balance Sheet, or Cash Flow reports<br>
+          <strong>&#8226;</strong> Analyze financial data across companies<br>
+          <strong>&#8226;</strong> Navigate the app<br><br>
+          What would you like to do?
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div style="padding:12px 16px;border-top:1px solid var(--color-border);display:flex;gap:8px;flex-shrink:0;background:var(--color-surface);">
+      <input id="chat-input" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChat()" style="flex:1;padding:10px 14px;border:1px solid var(--color-border);border-radius:10px;font-size:13px;background:var(--color-bg-muted);color:var(--color-text-primary);outline:none;" />
+      <button id="chat-send-btn" onclick="sendChat()" style="padding:10px 14px;background:#1a56db;color:white;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;">Send</button>
+    </div>
+  </div>
+</div>
+
 <script src="./app.js"></script>
 </body>
 </html>
