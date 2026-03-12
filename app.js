@@ -1408,7 +1408,7 @@ async function viewCompanyAccounts(companyId, companyName) {
   } catch (e) { body.innerHTML = `<p style="color:var(--color-error);">Error: ${e.message}</p>`; }
 }
 
-function closeModal(id) { document.getElementById(id).classList.remove("active"); }
+function closeModal(id) { const el = document.getElementById(id); el.classList.remove("active"); el.classList.remove("open"); }
 
 // --- Toast ---
 function showToast(msg, type) {
