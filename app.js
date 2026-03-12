@@ -689,10 +689,10 @@ function valRow(name, val, pv, hasCmp, cls) {
   const f = (n) => n === 0 ? "$0.00" : (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const escapedName = name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
   const clickable = name && !cls.includes("total-row") && !cls.includes("section-header");
-  const nameHtml = clickable
-    ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${name}</span>`
-    : name;
-  let h = `<tr class="${cls}"><td>${nameHtml}</td><td class="num">${f(val)}</td>`;
+  const valHtml = clickable
+    ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${f(val)}</span>`
+    : f(val);
+  let h = `<tr class="${cls}"><td>${name}</td><td class="num">${valHtml}</td>`;
   if (hasCmp) {
     const ch = val - pv;
     const pct = pv ? (ch / Math.abs(pv) * 100) : 0;
@@ -769,13 +769,14 @@ function renderByCompanyRows(arr, depth, breakdowns, companyNames, colCount) {
       const totalVal = parseFloat(r.ColData[1]?.value) || 0;
       const cls = depth > 0 ? `indent-${Math.min(depth, 2)}` : "";
       const escapedName = name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-      const nameHtml = name ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${name}</span>` : "";
-      h += `<tr class="${cls}"><td>${nameHtml}</td>`;
+      h += `<tr class="${cls}"><td>${name}</td>`;
       for (const cn of companyNames) {
         const cv = (breakdowns[cn] || {})[name] || 0;
-        h += `<td class="num">${f(cv)}</td>`;
+        const cvHtml = name ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${f(cv)}</span>` : f(cv);
+        h += `<td class="num">${cvHtml}</td>`;
       }
-      h += `<td class="num total-col-val">${f(totalVal)}</td></tr>`;
+      const totalHtml = name ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${f(totalVal)}</span>` : f(totalVal);
+      h += `<td class="num total-col-val">${totalHtml}</td></tr>`;
     }
   }
   return h;
