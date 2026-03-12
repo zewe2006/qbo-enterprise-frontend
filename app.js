@@ -630,16 +630,10 @@ function updateCharts(data) {
   const gc = dk ? "#393836" : "#dcd9d5";
   const colors = ["#20808D", "#A84B2F", "#1B474D", "#BCE2E7", "#944454", "#FFC553"];
 
+  // Load real revenue trend data from API
   const rc = document.getElementById("chart-revenue");
   if (rc) {
-    if (chartInstances.revenue) chartInstances.revenue.destroy();
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const labels = months.slice(0, new Date().getMonth() + 1);
-    chartInstances.revenue = new Chart(rc, {
-      type: "line",
-      data: { labels, datasets: [{ label: "Revenue", data: labels.map(() => Math.floor(Math.random() * 50000) + 30000), borderColor: colors[0], backgroundColor: colors[0] + "20", fill: true, tension: 0.3, pointRadius: 3 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: tc }, grid: { color: gc } }, y: { ticks: { color: tc, callback: (v) => "$" + (v / 1000).toFixed(0) + "K" }, grid: { color: gc } } } },
-    });
+    loadRevenueTrendChart(rc, colors, tc, gc);
   }
 
   const ec = document.getElementById("chart-expenses");
@@ -651,6 +645,88 @@ function updateCharts(data) {
       data: { labels: cats.map((c) => c.name), datasets: [{ data: cats.map((c) => Math.abs(c.value)), backgroundColor: colors, borderWidth: 0 }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right", labels: { color: tc, font: { size: 12 } } } } },
     });
+  }
+}
+
+async function loadRevenueTrendChart(canvas, colors, tc, gc) {
+  try {
+    // Build URL with company filter
+    let url = "/api/dashboard/revenue-trend?months=12";
+    const sel = getSelectedCompanies("dash");
+    if (sel.company_ids && sel.company_ids.length > 0) {
+      url += `&company_ids=${sel.company_ids.join(",")}`;
+    } else if (sel.company_id && sel.company_id !== "all") {
+      url += `&company_ids=${sel.company_id}`;
+    }
+    const trend = await apiGet(url);
+    if (!trend || !trend.months) return;
+
+    if (chartInstances.revenue) chartInstances.revenue.destroy();
+    const labels = trend.months.map((m) => m.label);
+    const revenueData = trend.months.map((m) => m.revenue);
+    const expenseData = trend.months.map((m) => m.expenses);
+
+    chartInstances.revenue = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Revenue",
+            data: revenueData,
+            borderColor: colors[0],
+            backgroundColor: colors[0] + "20",
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          },
+          {
+            label: "Expenses",
+            data: expenseData,
+            borderColor: colors[1],
+            backgroundColor: colors[1] + "20",
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            labels: { color: tc, font: { size: 12 }, usePointStyle: true, pointStyle: "circle" },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed.y;
+                if (Math.abs(v) >= 1e6) return `${ctx.dataset.label}: $${(v / 1e6).toFixed(2)}M`;
+                if (Math.abs(v) >= 1e3) return `${ctx.dataset.label}: $${(v / 1e3).toFixed(1)}K`;
+                return `${ctx.dataset.label}: $${v.toFixed(2)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { ticks: { color: tc, maxRotation: 45 }, grid: { color: gc } },
+          y: {
+            ticks: {
+              color: tc,
+              callback: (v) => {
+                if (Math.abs(v) >= 1e6) return "$" + (v / 1e6).toFixed(1) + "M";
+                return "$" + (v / 1000).toFixed(0) + "K";
+              },
+            },
+            grid: { color: gc },
+          },
+        },
+      },
+    });
+  } catch (e) {
+    console.warn("Revenue trend chart error:", e);
   }
 }
 
