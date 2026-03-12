@@ -851,7 +851,43 @@ html, body {
   margin-bottom: var(--space-1);
 }
 
-/* --- Responsive --- */
+/* --- Hamburger Button (hidden on desktop) --- */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+.hamburger-btn:hover {
+  background: var(--color-surface-offset);
+}
+
+/* --- Mobile Sidebar Backdrop --- */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: oklch(0 0 0 / 0.5);
+  z-index: 19;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.sidebar-backdrop.active {
+  display: block;
+  opacity: 1;
+}
+
+/* --- Table scroll wrapper for mobile --- */
+.table-scroll-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- Responsive: Tablet (icon sidebar) --- */
 @media (max-width: 1024px) {
   .app {
     grid-template-columns: 56px 1fr;
@@ -873,21 +909,251 @@ html, body {
   }
 }
 
+/* --- Responsive: Mobile (<768px) --- */
 @media (max-width: 768px) {
+  /* Grid becomes single column */
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
+
+  /* Hamburger visible */
+  .hamburger-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Sidebar becomes slide-in overlay */
   .sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 30;
+    grid-row: auto;
   }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  /* Restore sidebar text when open as overlay */
+  .sidebar.mobile-open .sidebar-brand-text,
+  .sidebar.mobile-open .sidebar-brand-sub,
+  .sidebar.mobile-open .sidebar-label,
+  .sidebar.mobile-open .sidebar-nav li a span,
+  .sidebar.mobile-open .sidebar-nav li button span {
+    display: inline;
+  }
+  .sidebar.mobile-open .sidebar-nav li a,
+  .sidebar.mobile-open .sidebar-nav li button {
+    justify-content: flex-start;
+    padding: var(--space-2) var(--space-3);
+  }
+  .sidebar.mobile-open .sidebar-brand {
+    justify-content: flex-start;
+  }
+
+  /* Header spans full width */
+  .header {
+    grid-column: 1;
+    padding: var(--space-2) var(--space-3);
+    min-height: 48px;
+    gap: var(--space-2);
+  }
+  .header-title {
+    font-size: var(--text-base);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .header-actions {
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+  #user-display {
+    display: none !important;
+  }
+
+  /* Main content spans full width */
+  .main {
+    grid-column: 1;
+    padding: var(--space-3);
+  }
+
+  /* KPI grid: 2 columns on mobile */
   .kpi-grid {
     grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
   }
+  .kpi-card {
+    padding: var(--space-3);
+  }
+  .kpi-value {
+    font-size: var(--text-lg);
+  }
+
+  /* Filter bars: stack vertically, full-width inputs */
   .filter-bar {
     flex-direction: column;
+    padding: var(--space-3);
+    gap: var(--space-2);
   }
+  .filter-group {
+    width: 100%;
+  }
+  .filter-group input,
+  .filter-group select {
+    width: 100%;
+    min-width: unset;
+  }
+  .filter-group-company {
+    min-width: unset;
+    width: 100%;
+  }
+  .multi-company-select {
+    min-width: unset;
+    width: 100%;
+  }
+  .multi-select-btn {
+    width: 100%;
+  }
+  .multi-select-dropdown {
+    min-width: unset;
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+
+  /* Dashboard period bar */
+  .dashboard-period-bar {
+    padding: var(--space-2) var(--space-3);
+  }
+  .dashboard-period-bar .filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .dashboard-period-bar .filter-group {
+    width: 100%;
+  }
+  .dashboard-period-bar select,
+  .dashboard-period-bar input[type="date"] {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  #dash-custom-dates {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  #dash-custom-dates input[type="date"] {
+    width: 100% !important;
+    flex: 1;
+  }
+  .dashboard-period-bar .btn-sm {
+    width: 100%;
+    justify-content: center;
+  }
+  #dash-period-label {
+    margin-left: 0 !important;
+    text-align: center;
+  }
+
+  /* Grid-2 becomes single column */
   .grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  /* Chart containers */
+  .chart-container {
+    height: 220px;
+  }
+
+  /* Cards */
+  .card {
+    padding: var(--space-3);
+  }
+
+  /* Tabs scroll horizontally */
+  .tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+  .tab-btn {
+    flex-shrink: 0;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+  }
+
+  /* Modals: full-screen on mobile */
+  .modal-overlay {
+    align-items: flex-end;
+  }
+  .modal,
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    margin: 0;
+    padding: var(--space-4);
+  }
+  .modal-header h3,
+  .modal-title {
+    font-size: var(--text-base);
+  }
+
+  /* Wizard steps: compact on mobile */
+  .wizard-step-label {
+    display: none;
+  }
+
+  /* Form rows stack */
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Company detail grid */
+  .company-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* User company checkboxes wrap tighter */
+  .user-company-checkboxes {
+    gap: var(--space-1);
+  }
+  .user-company-opt {
+    font-size: var(--text-xs);
+    padding: var(--space-1) var(--space-2);
+  }
+}
+
+/* --- Responsive: Small phone (<480px) --- */
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .kpi-card {
+    padding: var(--space-2) var(--space-3);
+  }
+  .header {
+    padding: var(--space-2);
+  }
+  .main {
+    padding: var(--space-2);
+  }
+  .filter-bar {
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+  }
+  .consolidated-badge {
+    font-size: var(--text-xs);
+    padding: var(--space-2) var(--space-3);
   }
 }
 
