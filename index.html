@@ -43,7 +43,9 @@
       </svg>
       <span class="login-logo-text">EnterpriseLedger</span>
     </div>
-    <div id="login-error" class="login-error"></div>
+    <div id="auth-error" class="login-error"></div>
+
+    <!-- Login Form -->
     <div id="login-form">
       <div class="form-group">
         <label class="form-label" for="login-email">Email</label>
@@ -56,9 +58,37 @@
       <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:var(--space-2);" onclick="doLogin()">
         Sign In
       </button>
-      <p id="login-hint" class="text-center text-muted mt-4" style="font-size:var(--text-xs);display:none;">
+      <p class="auth-switch text-center">
+        Don't have an account? <a href="#" onclick="showSignUp(); return false;">Sign Up</a>
       </p>
     </div>
+
+    <!-- Sign Up Form -->
+    <div id="signup-form" style="display:none;">
+      <div class="form-group">
+        <label class="form-label" for="signup-name">Full Name</label>
+        <input class="form-input" type="text" id="signup-name" placeholder="Enter your full name">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="signup-email">Email</label>
+        <input class="form-input" type="email" id="signup-email" placeholder="Enter your email">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="signup-password">Password</label>
+        <input class="form-input" type="password" id="signup-password" placeholder="Create a password (min 6 characters)">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="signup-confirm">Confirm Password</label>
+        <input class="form-input" type="password" id="signup-confirm" placeholder="Confirm your password">
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:var(--space-2);" onclick="doSignUp()">
+        Create Account
+      </button>
+      <p class="auth-switch text-center">
+        Already have an account? <a href="#" onclick="showLogin(); return false;">Sign In</a>
+      </p>
+    </div>
+
     <p class="text-center" style="margin-top:var(--space-3);font-size:var(--text-xs);color:var(--color-text-muted);">
       Need help? <a href="mailto:support@sweethut.com" style="color:var(--color-primary);">Contact Support</a>
     </p>

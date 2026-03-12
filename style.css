@@ -750,6 +750,20 @@ html, body {
   display: none;
 }
 
+.auth-switch {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.auth-switch a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-switch a:hover {
+  text-decoration: underline;
+}
+
 /* --- Chart Container --- */
 .chart-container {
   position: relative;

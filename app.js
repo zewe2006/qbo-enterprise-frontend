@@ -60,7 +60,7 @@ document.addEventListener("click", (e) => {
 async function doLogin() {
   const email = document.getElementById("login-email").value;
   const password = document.getElementById("login-password").value;
-  const errEl = document.getElementById("login-error");
+  const errEl = document.getElementById("auth-error");
   errEl.style.display = "none";
   try {
     const res = await fetch(`${API}/api/auth/login`, {
@@ -77,6 +77,59 @@ async function doLogin() {
     errEl.textContent = e.message;
     errEl.style.display = "block";
   }
+}
+
+async function doSignUp() {
+  const name = document.getElementById("signup-name").value.trim();
+  const email = document.getElementById("signup-email").value.trim();
+  const password = document.getElementById("signup-password").value;
+  const confirm = document.getElementById("signup-confirm").value;
+  const errEl = document.getElementById("auth-error");
+  errEl.style.display = "none";
+
+  if (!name || !email || !password) {
+    errEl.textContent = "Please fill in all fields.";
+    errEl.style.display = "block";
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = "Password must be at least 6 characters.";
+    errEl.style.display = "block";
+    return;
+  }
+  if (password !== confirm) {
+    errEl.textContent = "Passwords do not match.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Registration failed");
+    const data = await res.json();
+    authToken = data.token;
+    currentUser = data.user;
+    showApp();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = "block";
+  }
+}
+
+function showSignUp() {
+  document.getElementById("login-form").style.display = "none";
+  document.getElementById("signup-form").style.display = "block";
+  document.getElementById("auth-error").style.display = "none";
+}
+
+function showLogin() {
+  document.getElementById("signup-form").style.display = "none";
+  document.getElementById("login-form").style.display = "block";
+  document.getElementById("auth-error").style.display = "none";
 }
 
 function doLogout() {
