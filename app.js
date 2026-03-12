@@ -1,5 +1,5 @@
 /* ============================================
-   EnterpriseLedger — Application Logic
+   Consolidated Report — Application Logic
    ============================================ */
 
 // --- API Config ---
