@@ -168,6 +168,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
           <span>Billing</span>
         </a></li>
+        <li id="nav-knowledge-base" style="display:none;"><a href="#knowledge-base" data-page="knowledge-base">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          <span>Knowledge Base</span>
+        </a></li>
       </ul>
     </div>
 
@@ -855,7 +859,66 @@
       </div>
     </section>
 
+    <section id="page-knowledge-base" class="page-content">
+      <div class="card mb-6">
+        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+          <span class="card-title">AI Knowledge Base</span>
+          <button class="btn btn-primary btn-sm" onclick="openKBModal()">+ Add Entry</button>
+        </div>
+        <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin-bottom:16px;">Manage the knowledge the AI chat assistant uses to answer questions. Add accounting rules, how-to guides, and any custom information.</p>
+        
+        <!-- Category filter -->
+        <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+          <button class="btn btn-sm kb-filter active" data-cat="all" onclick="filterKB('all')">All</button>
+          <button class="btn btn-sm kb-filter" data-cat="accounting_rules" onclick="filterKB('accounting_rules')">Accounting Rules</button>
+          <button class="btn btn-sm kb-filter" data-cat="app_guide" onclick="filterKB('app_guide')">App Guides</button>
+          <button class="btn btn-sm kb-filter" data-cat="general" onclick="filterKB('general')">General</button>
+        </div>
+
+        <div id="kb-entries-list">
+          <div class="loading-placeholder" style="padding:40px; text-align:center; color:var(--color-text-muted);">Loading knowledge base...</div>
+        </div>
+      </div>
+    </section>
+
   </main>
+</div>
+
+<!-- ======== MODAL: Knowledge Base Entry ======== -->
+<div id="kb-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:640px;">
+    <div class="modal-header">
+      <h3 id="kb-modal-title">Add Knowledge Entry</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('kb-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4);">
+      <input type="hidden" id="kb-entry-id">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label style="font-weight:600; font-size:var(--text-sm); display:block; margin-bottom:4px;">Category</label>
+        <select id="kb-category" style="width:100%; padding:8px 12px; border:1.5px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm); background:white;">
+          <option value="accounting_rules">Accounting Rules</option>
+          <option value="app_guide">App Guide</option>
+          <option value="general">General</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label style="font-weight:600; font-size:var(--text-sm); display:block; margin-bottom:4px;">Title</label>
+        <input type="text" id="kb-title" placeholder="e.g., How to process management fees" style="width:100%; padding:8px 12px; border:1.5px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm);">
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label style="font-weight:600; font-size:var(--text-sm); display:block; margin-bottom:4px;">Content</label>
+        <textarea id="kb-content" rows="10" placeholder="Enter the knowledge content the AI should know about..." style="width:100%; padding:8px 12px; border:1.5px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm); resize:vertical; font-family:inherit;"></textarea>
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+        <input type="checkbox" id="kb-enabled" checked>
+        <label for="kb-enabled" style="font-size:var(--text-sm);">Enabled (included in AI context)</label>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; padding:var(--space-4); border-top:1px solid var(--color-border);">
+      <button class="btn btn-outline btn-sm" onclick="closeModal('kb-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveKBEntry()">Save Entry</button>
+    </div>
+  </div>
 </div>
 
 <!-- ======== MODAL: Edit User ======== -->

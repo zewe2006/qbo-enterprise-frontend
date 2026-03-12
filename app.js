@@ -162,6 +162,8 @@ function showApp() {
   if (navUsers) navUsers.style.display = currentUser.role === "admin" ? "" : "none";
   const navBilling = document.getElementById("nav-billing");
   if (navBilling) navBilling.style.display = currentUser.role === "admin" ? "" : "none";
+  const navKB = document.getElementById("nav-knowledge-base");
+  if (navKB) navKB.style.display = currentUser.role === "admin" ? "" : "none";
   applyRoleRestrictions();
   updateTrialBanner();
   initDefaultDates();
@@ -434,6 +436,7 @@ function navigateTo(page) {
   if (page === "account-mapping") loadAccountMappings();
   if (page === "users") loadUsers();
   if (page === "billing") loadBilling();
+  if (page === "knowledge-base") loadKnowledgeBase();
 }
 
 window.addEventListener("hashchange", () => {
@@ -2665,6 +2668,163 @@ function executeChatReport(jsonStr) {
     @media (max-width: 640px) {
       #chat-window { width: calc(100vw - 20px) !important; right: -10px !important; height: calc(100vh - 140px) !important; bottom: 65px !important; }
     }
+    .kb-entry-card { border: 1.5px solid var(--color-border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px; transition: border-color 0.15s; }
+    .kb-entry-card:hover { border-color: var(--color-primary); }
+    .kb-entry-card.disabled { opacity: 0.5; }
+    .kb-entry-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .kb-entry-title { font-weight: 600; font-size: var(--text-base); }
+    .kb-entry-category { font-size: var(--text-xs); color: white; background: var(--color-primary); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+    .kb-entry-category.cat-accounting_rules { background: #059669; }
+    .kb-entry-category.cat-app_guide { background: #2563eb; }
+    .kb-entry-category.cat-general { background: #6b7280; }
+    .kb-entry-content { font-size: var(--text-sm); color: var(--color-text-muted); white-space: pre-wrap; line-height: 1.5; max-height: 80px; overflow: hidden; position: relative; }
+    .kb-entry-content.expanded { max-height: none; }
+    .kb-entry-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .kb-filter.active { background: var(--color-primary); color: white; }
   `;
   document.head.appendChild(style);
 })();
+
+
+// =====================================================================
+//  KNOWLEDGE BASE
+// =====================================================================
+
+let kbEntries = [];
+let kbFilterCat = "all";
+
+async function loadKnowledgeBase() {
+  const container = document.getElementById("kb-entries-list");
+  container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--color-text-muted);">Loading...</div>';
+  try {
+    const resp = await fetch(`${API}/api/knowledge-base`, { headers: { Authorization: `Bearer ${authToken}` } });
+    if (!resp.ok) throw new Error("Failed to load");
+    kbEntries = await resp.json();
+    renderKBEntries();
+  } catch (err) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444;">Failed to load knowledge base.</div>';
+    console.error("loadKnowledgeBase error:", err);
+  }
+}
+
+function renderKBEntries() {
+  const container = document.getElementById("kb-entries-list");
+  const filtered = kbFilterCat === "all" ? kbEntries : kbEntries.filter(e => e.category === kbFilterCat);
+  
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--color-text-muted);">No entries found. Click "+ Add Entry" to create one.</div>';
+    return;
+  }
+
+  const catLabels = { accounting_rules: "Accounting Rules", app_guide: "App Guide", general: "General" };
+  container.innerHTML = filtered.map(e => `
+    <div class="kb-entry-card ${e.enabled ? '' : 'disabled'}" data-id="${e.id}">
+      <div class="kb-entry-header">
+        <div style="flex:1;">
+          <span class="kb-entry-category cat-${e.category}">${catLabels[e.category] || e.category}</span>
+          <div class="kb-entry-title" style="margin-top:6px;">${escapeHtml(e.title)}</div>
+        </div>
+        ${!e.enabled ? '<span style="font-size:var(--text-xs);color:#ef4444;font-weight:500;">Disabled</span>' : ''}
+      </div>
+      <div class="kb-entry-content" id="kb-content-${e.id}">${escapeHtml(e.content)}</div>
+      <div class="kb-entry-actions">
+        <button class="btn btn-outline btn-sm" onclick="toggleKBContent('${e.id}')" style="font-size:var(--text-xs);">Show More</button>
+        <button class="btn btn-outline btn-sm" onclick="editKBEntry('${e.id}')" style="font-size:var(--text-xs);">Edit</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleKBEnabled('${e.id}', ${e.enabled ? 'false' : 'true'})" style="font-size:var(--text-xs);">${e.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="btn btn-outline btn-sm" onclick="deleteKBEntry('${e.id}')" style="font-size:var(--text-xs);color:#ef4444;border-color:#ef4444;">Delete</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function filterKB(cat) {
+  kbFilterCat = cat;
+  document.querySelectorAll(".kb-filter").forEach(b => b.classList.toggle("active", b.dataset.cat === cat));
+  renderKBEntries();
+}
+
+function toggleKBContent(id) {
+  const el = document.getElementById(`kb-content-${id}`);
+  if (el) el.classList.toggle("expanded");
+}
+
+function openKBModal(entry = null) {
+  document.getElementById("kb-entry-id").value = entry ? entry.id : "";
+  document.getElementById("kb-modal-title").textContent = entry ? "Edit Knowledge Entry" : "Add Knowledge Entry";
+  document.getElementById("kb-category").value = entry ? entry.category : "general";
+  document.getElementById("kb-title").value = entry ? entry.title : "";
+  document.getElementById("kb-content").value = entry ? entry.content : "";
+  document.getElementById("kb-enabled").checked = entry ? entry.enabled : true;
+  const modal = document.getElementById("kb-modal");
+  modal.classList.add("active", "open");
+}
+
+function editKBEntry(id) {
+  const entry = kbEntries.find(e => e.id === id);
+  if (entry) openKBModal(entry);
+}
+
+async function saveKBEntry() {
+  const id = document.getElementById("kb-entry-id").value;
+  const data = {
+    category: document.getElementById("kb-category").value,
+    title: document.getElementById("kb-title").value.trim(),
+    content: document.getElementById("kb-content").value.trim(),
+    enabled: document.getElementById("kb-enabled").checked,
+  };
+  if (!data.title || !data.content) {
+    alert("Title and content are required.");
+    return;
+  }
+  try {
+    const url = id ? `${API}/api/knowledge-base/${id}` : `${API}/api/knowledge-base`;
+    const method = id ? "PUT" : "POST";
+    const resp = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) throw new Error("Failed to save");
+    closeModal("kb-modal");
+    loadKnowledgeBase();
+  } catch (err) {
+    alert("Error saving entry: " + err.message);
+    console.error("saveKBEntry error:", err);
+  }
+}
+
+async function toggleKBEnabled(id, enabled) {
+  try {
+    const resp = await fetch(`${API}/api/knowledge-base/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!resp.ok) throw new Error("Failed to update");
+    loadKnowledgeBase();
+  } catch (err) {
+    alert("Error updating entry.");
+    console.error("toggleKBEnabled error:", err);
+  }
+}
+
+async function deleteKBEntry(id) {
+  if (!confirm("Are you sure you want to delete this knowledge entry?")) return;
+  try {
+    const resp = await fetch(`${API}/api/knowledge-base/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!resp.ok) throw new Error("Failed to delete");
+    loadKnowledgeBase();
+  } catch (err) {
+    alert("Error deleting entry.");
+    console.error("deleteKBEntry error:", err);
+  }
+}
