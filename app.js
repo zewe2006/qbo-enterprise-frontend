@@ -160,6 +160,7 @@ function showApp() {
   const navBilling = document.getElementById("nav-billing");
   if (navBilling) navBilling.style.display = currentUser.role === "admin" ? "" : "none";
   applyRoleRestrictions();
+  updateTrialBanner();
   initDefaultDates();
   loadCompanyList();
   navigateTo(location.hash.slice(1) || "dashboard");
@@ -171,6 +172,47 @@ function applyRoleRestrictions() {
   const isViewer = currentUser.role === "viewer";
   document.querySelectorAll(".admin-only").forEach((el) => {
     el.style.display = isViewer ? "none" : "";
+  });
+}
+
+function updateTrialBanner() {
+  const trialBanner = document.getElementById("trial-banner");
+  const expiredBanner = document.getElementById("trial-expired-banner");
+  if (!trialBanner || !expiredBanner || !currentUser) return;
+
+  // Hide both by default
+  trialBanner.style.display = "none";
+  expiredBanner.style.display = "none";
+
+  if (currentUser.trial_active) {
+    const days = currentUser.trial_days_remaining || 0;
+    const bannerText = document.getElementById("trial-banner-text");
+    if (bannerText) {
+      bannerText.innerHTML = `<strong>${days} day${days !== 1 ? "s" : ""} left</strong> in your free Business trial`;
+    }
+    trialBanner.style.display = "flex";
+  } else if (currentUser.trial_expired && currentUser.plan === "free") {
+    expiredBanner.style.display = "flex";
+  }
+
+  // Apply feature gating for free plan users
+  applyPlanRestrictions();
+}
+
+function applyPlanRestrictions() {
+  if (!currentUser) return;
+  const isFree = currentUser.plan === "free" && !currentUser.trial_active;
+  // Gate Business-only features: period comparison, intercompany journals, account mapping
+  document.querySelectorAll(".business-only").forEach((el) => {
+    if (isFree) {
+      el.style.opacity = "0.5";
+      el.style.pointerEvents = "none";
+      el.title = "Upgrade to Business plan to use this feature";
+    } else {
+      el.style.opacity = "";
+      el.style.pointerEvents = "";
+      el.title = "";
+    }
   });
 }
 
@@ -2289,7 +2331,14 @@ async function loadBilling() {
     const upgradeCard = document.getElementById("billing-upgrade-card");
     const manageCard = document.getElementById("billing-manage-card");
 
-    if (data.plan === "business") {
+    if (data.trial_active) {
+      // Active trial
+      planName.textContent = "Business (Trial)";
+      planPrice.textContent = "Free for " + data.trial_days_remaining + " more day" + (data.trial_days_remaining !== 1 ? "s" : "");
+      planStatus.innerHTML = '<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#dbeafe;color:#1a56db;">&#9200; Trial Active</span>';
+      upgradeCard.style.display = "block";
+      manageCard.style.display = "none";
+    } else if (data.plan === "business" && data.subscription_status === "active") {
       planName.textContent = "Business";
       planPrice.textContent = "$49 / month";
       const statusText = data.subscription_status === "active" ? "Active" : data.subscription_status === "past_due" ? "Past Due" : data.subscription_status;
@@ -2300,7 +2349,8 @@ async function loadBilling() {
     } else {
       planName.textContent = "Starter";
       planPrice.textContent = "Free";
-      planStatus.innerHTML = '<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#dbeafe;color:#1d4ed8;">Free Plan</span>';
+      const expiredNote = data.trial_expired ? ' <span style="font-size:11px;color:#dc2626;">(trial ended)</span>' : '';
+      planStatus.innerHTML = '<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#dbeafe;color:#1d4ed8;">Free Plan</span>' + expiredNote;
       upgradeCard.style.display = "block";
       manageCard.style.display = "none";
     }
