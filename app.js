@@ -80,6 +80,7 @@ async function doLogin() {
 }
 
 async function doSignUp() {
+  const orgName = document.getElementById("signup-org-name").value.trim();
   const name = document.getElementById("signup-name").value.trim();
   const email = document.getElementById("signup-email").value.trim();
   const password = document.getElementById("signup-password").value;
@@ -107,7 +108,7 @@ async function doSignUp() {
     const res = await fetch(`${API}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, org_name: orgName }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Registration failed");
     const data = await res.json();
@@ -148,6 +149,11 @@ function showApp() {
   document.getElementById("app-shell").classList.remove("hidden");
   document.getElementById("user-display").textContent =
     (currentUser.name || currentUser.email) + (currentUser.role === "admin" ? " (Admin)" : " (Viewer)");
+  // Show org name in sidebar brand
+  const brandSub = document.querySelector(".sidebar-brand-sub");
+  if (brandSub && currentUser.org_name) {
+    brandSub.textContent = currentUser.org_name;
+  }
   // Show/hide admin-only nav items
   const navUsers = document.getElementById("nav-users");
   if (navUsers) navUsers.style.display = currentUser.role === "admin" ? "" : "none";
