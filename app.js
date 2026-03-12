@@ -607,7 +607,11 @@ function updateKPIs(data) {
     document.getElementById("kpi-assets").textContent = fmt(ta);
   }
 
-  document.getElementById("kpi-companies").textContent = data.company_count || allCompanies.length || 0;
+  const connCount = allCompanies.filter(c => c.status === "connected").length;
+  const totalCount = allCompanies.length;
+  document.getElementById("kpi-companies").textContent = connCount;
+  const totalEl = document.getElementById("kpi-companies-total");
+  if (totalEl) totalEl.textContent = totalCount > 0 ? `of ${totalCount} total` : "No companies yet";
 }
 
 function updateCharts(data) {
