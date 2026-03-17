@@ -3040,26 +3040,6 @@ async function _diShowMappingStep() {
     console.warn("Could not load chart of accounts:", e);
   }
 
-  // Build grouped <option> list by classification
-  let accountOptionsHtml = '<option value="">-- Select Account --</option>';
-  if (accounts.length) {
-    const grouped = {};
-    for (const a of accounts) {
-      const cls = a.classification || a.account_type || "Other";
-      if (!grouped[cls]) grouped[cls] = [];
-      grouped[cls].push(a);
-    }
-    for (const [cls, accts] of Object.entries(grouped)) {
-      accountOptionsHtml += `<optgroup label="${cls}">`;
-      for (const a of accts) {
-        const fqn = a.fully_qualified_name || a.name;
-        const displayName = fqn.includes(":") ? "\u00A0\u00A0\u00A0" + fqn : fqn;
-        accountOptionsHtml += `<option value="${_escHtml(fqn)}">${_escHtml(displayName)}</option>`;
-      }
-      accountOptionsHtml += "</optgroup>";
-    }
-  }
-
   // Define mapping fields based on platform
   const fields = [
     { key: "bank", label: "Bank Account (Net Payout)" },
@@ -3077,23 +3057,65 @@ async function _diShowMappingStep() {
     <div style="display:flex;flex-direction:column;gap:4px;">
       <label style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-secondary);">${f.label}</label>
       <select data-map-key="${f.key}" style="${selectStyle}">
-        ${accountOptionsHtml}
+        <option value="">-- Select Account --</option>
       </select>
     </div>
   `).join("");
+
+  // Build options using DOM API (avoids HTML encoding issues with &, quotes, etc.)
+  if (accounts.length) {
+    const grouped = {};
+    for (const a of accounts) {
+      const cls = a.classification || a.account_type || "Other";
+      if (!grouped[cls]) grouped[cls] = [];
+      grouped[cls].push(a);
+    }
+    container.querySelectorAll("select[data-map-key]").forEach(sel => {
+      for (const [cls, accts] of Object.entries(grouped)) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = cls;
+        for (const a of accts) {
+          const fqn = a.fully_qualified_name || a.name;
+          const displayName = fqn.includes(":") ? "\u00A0\u00A0\u00A0" + fqn : fqn;
+          const opt = document.createElement("option");
+          opt.value = fqn;
+          opt.textContent = displayName;
+          optgroup.appendChild(opt);
+        }
+        sel.appendChild(optgroup);
+      }
+    });
+  }
+
+  console.log("[DI] Mapping from API:", JSON.stringify(mapping));
+  console.log("[DI] Accounts loaded:", accounts.length);
 
   // Set saved mapping values
   for (const f of fields) {
     if (mapping[f.key]) {
       const sel = container.querySelector(`select[data-map-key="${f.key}"]`);
       if (sel) {
+        const allValues = [...sel.options].map(o => o.value).filter(Boolean);
+        console.log(`[DI] Restoring ${f.key} = "${mapping[f.key]}" | Options count: ${allValues.length}`);
         // Try exact match first
-        if ([...sel.options].some(o => o.value === mapping[f.key])) {
+        const exactMatch = [...sel.options].some(o => o.value === mapping[f.key]);
+        if (exactMatch) {
           sel.value = mapping[f.key];
+          console.log(`[DI]   -> Exact match found for ${f.key}`);
         } else {
-          // Try partial match (name without parent)
-          const match = [...sel.options].find(o => o.value && (o.value.endsWith(":" + mapping[f.key]) || o.value === mapping[f.key] || o.textContent.trim() === mapping[f.key]));
-          if (match) sel.value = match.value;
+          // Try normalized match (trim whitespace, case-insensitive)
+          const saved = mapping[f.key].trim().toLowerCase();
+          const match = [...sel.options].find(o => {
+            if (!o.value) return false;
+            const v = o.value.trim().toLowerCase();
+            return v === saved || v.endsWith(":" + saved) || o.textContent.trim().toLowerCase() === saved;
+          });
+          if (match) {
+            sel.value = match.value;
+            console.log(`[DI]   -> Fuzzy match found for ${f.key}: "${match.value}"`);
+          } else {
+            console.warn(`[DI]   -> NO match for ${f.key}: "${mapping[f.key]}"`);
+          }
         }
       }
     }
