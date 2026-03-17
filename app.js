@@ -3417,8 +3417,8 @@ async function diLoadHistory() {
         <td style="text-align:center;">${h.entry_count}</td>
         <td>${statusBadge}${jeInfo}</td>
         <td>
-          <button class="btn btn-ghost btn-sm" onclick="diDownloadHistoryCSV('${h.id}')" title="Download CSV" style="padding:4px 8px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <button class="btn btn-ghost btn-sm" onclick="diViewHistoryPreview('${h.id}','${_escHtml(platform)}','${_escHtml(h.store_name || '')}','${_escHtml(h.statement_period || '')}')" title="View Preview" style="padding:4px 8px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </td>
       `;
@@ -3435,14 +3435,102 @@ async function diLoadHistory() {
   }
 }
 
-async function diDownloadHistoryCSV(historyId) {
+/** View a past import's journal entries in a preview modal. */
+async function diViewHistoryPreview(historyId, platform, storeName, period) {
   try {
     const data = await apiGet(`/api/delivery-import/history/${historyId}/csv`);
-    if (data.csv_content) {
-      _diTriggerCsvDownload(data.csv_content, data.platform, data.statement_period);
+    if (!data.csv_content) { alert("No data available for this import."); return; }
+
+    // Parse CSV into entry rows
+    const lines = data.csv_content.split("\n").filter(l => l.trim());
+    if (lines.length < 2) { alert("No journal entries found."); return; }
+
+    // Parse header to find column indices
+    const header = _diParseCSVLine(lines[0]);
+    const idx = {};
+    header.forEach((h, i) => { idx[h.trim().toLowerCase().replace(/\s+/g, "_")] = i; });
+    const colJNo = idx["journal_no"] ?? idx["*journalno"] ?? idx["journal_number"] ?? 0;
+    const colDate = idx["journal_date"] ?? idx["*journaldate"] ?? idx["date"] ?? 1;
+    const colAcct = idx["account"] ?? idx["account_name"] ?? idx["*accountname"] ?? 2;
+    const colDebit = idx["debit"] ?? idx["*debit"] ?? 3;
+    const colCredit = idx["credit"] ?? idx["*credit"] ?? 4;
+    const colDesc = idx["description"] ?? idx["memo"] ?? idx["*description"] ?? 5;
+
+    const entries = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = _diParseCSVLine(lines[i]);
+      if (cols.length < 3) continue;
+      entries.push({
+        journal_no: (cols[colJNo] || "").trim(),
+        journal_date: (cols[colDate] || "").trim(),
+        account: (cols[colAcct] || "").trim(),
+        debit: (cols[colDebit] || "").trim(),
+        credit: (cols[colCredit] || "").trim(),
+        description: (cols[colDesc] || "").trim(),
+      });
     }
+
+    // Set info text
+    const info = document.getElementById("di-history-preview-info");
+    info.textContent = `${platform} — ${storeName}${period ? " — " + period : ""} — ${entries.length} line(s)`;
+
+    // Build preview table
+    const tbody = document.getElementById("di-history-preview-body");
+    tbody.innerHTML = "";
+    let lastJournal = "";
+    for (const e of entries) {
+      const isNew = e.journal_no && e.journal_no !== lastJournal;
+      if (e.journal_no) lastJournal = e.journal_no;
+      const row = document.createElement("tr");
+      if (isNew) row.style.borderTop = "2px solid var(--color-border)";
+      const debitVal = parseFloat(e.debit) || 0;
+      const creditVal = parseFloat(e.credit) || 0;
+      row.innerHTML = `
+        <td style="font-weight:${isNew ? '600' : '400'};">${isNew ? e.journal_no : ""}</td>
+        <td>${isNew ? e.journal_date : ""}</td>
+        <td>${_escHtml(e.account)}</td>
+        <td style="text-align:right;${debitVal ? 'color:var(--color-danger,#dc2626);' : ''}">${debitVal ? "$" + debitVal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : ""}</td>
+        <td style="text-align:right;${creditVal ? 'color:var(--color-success,#16a34a);' : ''}">${creditVal ? "$" + creditVal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : ""}</td>
+        <td style="font-size:var(--text-xs);color:var(--color-text-muted);">${_escHtml(e.description)}</td>
+      `;
+      tbody.appendChild(row);
+    }
+
+    // Show modal
+    const modal = document.getElementById("di-history-preview-modal");
+    modal.style.display = "flex";
+    modal.classList.add("active");
   } catch (err) {
-    alert("Could not download CSV: " + err.message);
-    console.error("diDownloadHistoryCSV error:", err);
+    alert("Could not load preview: " + err.message);
+    console.error("diViewHistoryPreview error:", err);
   }
+}
+
+/** Parse a single CSV line respecting quoted fields. */
+function _diParseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current); current = ""; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+/** Close the history preview modal. */
+function diCloseHistoryPreview() {
+  const modal = document.getElementById("di-history-preview-modal");
+  modal.style.display = "none";
+  modal.classList.remove("active");
+  modal.classList.remove("open");
 }

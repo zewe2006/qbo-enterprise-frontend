@@ -971,6 +971,27 @@
         </div>
       </div>
 
+      <!-- History Preview Modal -->
+      <div class="modal-backdrop" id="di-history-preview-modal" style="display:none;">
+        <div class="modal" style="max-width:900px;width:95%;max-height:85vh;display:flex;flex-direction:column;">
+          <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div>
+              <h3 style="font-size:var(--text-base);font-weight:700;margin:0;">Journal Entry Preview</h3>
+              <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin:2px 0 0;" id="di-history-preview-info"></p>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="diCloseHistoryPreview()" style="padding:4px 8px;">&times;</button>
+          </div>
+          <div style="overflow:auto;flex:1;padding:0 24px 24px;">
+            <table class="data-table" style="width:100%;">
+              <thead style="position:sticky;top:0;background:var(--color-surface);z-index:1;">
+                <tr><th>Journal No</th><th>Date</th><th>Account</th><th style="text-align:right;">Debit</th><th style="text-align:right;">Credit</th><th>Description</th></tr>
+              </thead>
+              <tbody id="di-history-preview-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Import History Section -->
       <div class="card" id="di-history-card">
         <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
