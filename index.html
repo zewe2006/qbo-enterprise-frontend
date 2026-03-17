@@ -150,6 +150,16 @@
     </div>
 
     <div class="sidebar-section">
+      <div class="sidebar-label">Import</div>
+      <ul class="sidebar-nav">
+        <li class="business-only"><a href="#delivery-import" data-page="delivery-import">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span>UberEats / DoorDash</span>
+        </a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
       <div class="sidebar-label">Settings</div>
       <ul class="sidebar-nav">
         <li><a href="#companies" data-page="companies">
@@ -877,6 +887,79 @@
 
         <div id="kb-entries-list">
           <div class="loading-placeholder" style="padding:40px; text-align:center; color:var(--color-text-muted);">Loading knowledge base...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== DELIVERY IMPORT PAGE ======== -->
+    <section id="page-delivery-import" class="page-content">
+      <div class="card mb-6">
+        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <span class="card-title">Import Delivery Platform Statements</span>
+        </div>
+        <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin-bottom:20px;">Upload Uber Eats or DoorDash monthly statement PDFs to generate QBO-compatible journal entries for import into QuickBooks.</p>
+
+        <!-- Step 1: Upload -->
+        <div id="di-step-upload" class="di-step">
+          <div style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; margin-bottom:16px;">
+            <div class="form-group" style="flex:1; min-width:200px;">
+              <label style="font-weight:600; font-size:var(--text-sm); display:block; margin-bottom:4px;">Company</label>
+              <select id="di-company" style="width:100%; padding:8px 12px; border:1.5px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm);"></select>
+            </div>
+          </div>
+          <div id="di-dropzone" style="border:2px dashed var(--color-border); border-radius:var(--radius-lg); padding:48px 24px; text-align:center; cursor:pointer; transition:all 0.2s;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="1.5" style="width:48px; height:48px; margin:0 auto 12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <p style="font-size:var(--text-base); font-weight:600; margin-bottom:4px;">Drop your statement PDF here</p>
+            <p style="font-size:var(--text-sm); color:var(--color-text-muted);">Supports Uber Eats and DoorDash monthly statements</p>
+            <input type="file" id="di-file-input" accept=".pdf" style="display:none;">
+          </div>
+          <div id="di-upload-status" style="display:none; margin-top:16px; padding:12px 16px; border-radius:var(--radius-md); font-size:var(--text-sm);"></div>
+        </div>
+
+        <!-- Step 2: Account Mapping -->
+        <div id="di-step-mapping" class="di-step" style="display:none;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <h3 style="font-size:var(--text-base); font-weight:700; margin:0;" id="di-platform-label">Uber Eats Statement</h3>
+              <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin:2px 0 0;" id="di-store-info"></p>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="diResetUpload()">Upload Different File</button>
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <h4 style="font-size:var(--text-sm); font-weight:700; margin-bottom:12px;">QBO Account Mapping</h4>
+            <p style="font-size:var(--text-xs); color:var(--color-text-muted); margin-bottom:12px;">Map each category to the correct QuickBooks account name. These will be saved per company.</p>
+            <div id="di-mapping-fields" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px;"></div>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <label style="font-weight:600; font-size:var(--text-sm); display:block; margin-bottom:4px;">Journal Number Prefix</label>
+            <input type="text" id="di-prefix" value="UBER" style="width:160px; padding:8px 12px; border:1.5px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm);">
+          </div>
+
+          <button class="btn btn-primary" onclick="diGeneratePreview()" id="di-generate-btn">Generate Journal Entries</button>
+        </div>
+
+        <!-- Step 3: Preview & Download -->
+        <div id="di-step-preview" class="di-step" style="display:none;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <h3 style="font-size:var(--text-base); font-weight:700; margin:0;">Journal Entry Preview</h3>
+              <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin:2px 0 0;" id="di-preview-info"></p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="diBackToMapping()">Back to Mapping</button>
+              <button class="btn btn-primary btn-sm" onclick="diDownloadCSV()">Download CSV</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table" id="di-preview-table">
+              <thead>
+                <tr><th>Journal No</th><th>Date</th><th>Account</th><th style="text-align:right;">Debit</th><th style="text-align:right;">Credit</th><th>Description</th></tr>
+              </thead>
+              <tbody id="di-preview-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

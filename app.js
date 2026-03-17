@@ -425,6 +425,7 @@ function navigateTo(page) {
     users: "User Management",
     billing: "Billing & Subscription",
     "knowledge-base": "AI Knowledge Base",
+    "delivery-import": "UberEats / DoorDash Import",
   };
   // Block non-admin from users page
   if (page === "users" && currentUser && currentUser.role !== "admin") {
@@ -438,6 +439,7 @@ function navigateTo(page) {
   if (page === "users") loadUsers();
   if (page === "billing") loadBilling();
   if (page === "knowledge-base") loadKnowledgeBase();
+  if (page === "delivery-import") diInit();
 }
 
 window.addEventListener("hashchange", () => {
@@ -2904,4 +2906,281 @@ async function deleteKBEntry(id) {
     alert("Error deleting entry.");
     console.error("deleteKBEntry error:", err);
   }
+}
+
+/* ============================================
+   DELIVERY IMPORT (Uber Eats / DoorDash)
+   ============================================ */
+
+let diParsedData = null;   // holds parsed response from /api/delivery-import/parse
+let diCsvContent = "";     // the raw CSV string for download
+let diEntries = [];        // array of journal entry rows for preview
+
+/** Initialise the delivery import page each time it's shown. */
+function diInit() {
+  const sel = document.getElementById("di-company");
+  if (!sel) return;
+  // Populate company dropdown with connected companies
+  const connected = allCompanies.filter(c => c.status === "connected");
+  sel.innerHTML = connected.length
+    ? connected.map(c => `<option value="${c.id}">${c.name}</option>`).join("")
+    : '<option value="" disabled>No connected companies</option>';
+
+  // Reset to step 1
+  diResetUpload();
+  _diSetupDragDrop();
+}
+
+/** Wire up drag-and-drop + click-to-browse on the dropzone. */
+function _diSetupDragDrop() {
+  const dz = document.getElementById("di-dropzone");
+  const fi = document.getElementById("di-file-input");
+  if (!dz || !fi) return;
+  // Remove old listeners by cloning
+  const freshDz = dz.cloneNode(true);
+  dz.parentNode.replaceChild(freshDz, dz);
+  const freshFi = freshDz.querySelector("#di-file-input") || document.getElementById("di-file-input");
+
+  freshDz.addEventListener("click", () => freshFi.click());
+  freshDz.addEventListener("dragover", (e) => { e.preventDefault(); freshDz.style.borderColor = "var(--color-primary)"; freshDz.style.background = "var(--color-primary-bg)"; });
+  freshDz.addEventListener("dragleave", () => { freshDz.style.borderColor = "var(--color-border)"; freshDz.style.background = ""; });
+  freshDz.addEventListener("drop", (e) => {
+    e.preventDefault();
+    freshDz.style.borderColor = "var(--color-border)";
+    freshDz.style.background = "";
+    const file = e.dataTransfer.files[0];
+    if (file) _diUploadFile(file);
+  });
+  freshFi.addEventListener("change", (e) => {
+    if (e.target.files[0]) _diUploadFile(e.target.files[0]);
+  });
+}
+
+/** Upload the selected PDF to the parse endpoint. */
+async function _diUploadFile(file) {
+  if (!file.name.toLowerCase().endsWith(".pdf")) {
+    _diShowStatus("Only PDF files are supported.", true);
+    return;
+  }
+  const companyId = document.getElementById("di-company").value;
+  if (!companyId) {
+    _diShowStatus("Please select a company first.", true);
+    return;
+  }
+
+  _diShowStatus("Uploading and parsing PDF...", false, true);
+
+  const form = new FormData();
+  form.append("file", file);
+
+  try {
+    const resp = await fetch(`${API}/api/delivery-import/parse`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: form,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to parse PDF");
+    }
+    diParsedData = await resp.json();
+    _diShowStatus(`Detected <strong>${diParsedData.platform === "ubereats" ? "Uber Eats" : "DoorDash"}</strong> statement — ${diParsedData.payouts.length} payout(s) found.`, false);
+
+    // Move to mapping step
+    await _diShowMappingStep();
+  } catch (err) {
+    _diShowStatus(err.message, true);
+    console.error("Delivery import parse error:", err);
+  }
+}
+
+/** Show a status message below the dropzone. */
+function _diShowStatus(msg, isError, isLoading) {
+  const el = document.getElementById("di-upload-status");
+  el.style.display = "block";
+  el.style.background = isError ? "var(--color-danger-bg, #fef2f2)" : "var(--color-success-bg, #f0fdf4)";
+  el.style.color = isError ? "var(--color-danger, #dc2626)" : "var(--color-success, #16a34a)";
+  if (isLoading) {
+    el.style.background = "var(--color-info-bg, #eff6ff)";
+    el.style.color = "var(--color-info, #2563eb)";
+  }
+  el.innerHTML = (isLoading ? '<span class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px;"></span>' : "") + msg;
+}
+
+/** Populate and show the mapping step. */
+async function _diShowMappingStep() {
+  const platform = diParsedData.platform;
+  const companyId = document.getElementById("di-company").value;
+
+  // Set header label
+  const label = document.getElementById("di-platform-label");
+  label.textContent = platform === "ubereats" ? "Uber Eats Statement" : "DoorDash Statement";
+  const info = document.getElementById("di-store-info");
+  info.textContent = [diParsedData.store_name, diParsedData.statement_period].filter(Boolean).join(" — ");
+
+  // Set default prefix
+  document.getElementById("di-prefix").value = platform === "ubereats" ? "UBER" : "DD";
+
+  // Load saved mapping or defaults
+  let mapping = {};
+  try {
+    const resp = await apiGet(`/api/delivery-import/mapping?company_id=${companyId}&platform=${platform}`);
+    mapping = resp.mapping || {};
+  } catch {
+    // Use empty — fields will have defaults below
+  }
+
+  // Define mapping fields based on platform
+  const fields = [
+    { key: "bank", label: "Bank Account (Net Payout)", placeholder: "e.g. Checking" },
+    { key: "income", label: `${platform === "ubereats" ? "Uber Eats" : "DoorDash"} Income Account`, placeholder: platform === "ubereats" ? "e.g. Ubereats" : "e.g. DoorDash" },
+    { key: "fees", label: "Platform Fees Account", placeholder: "e.g. Delivery Fee" },
+    { key: "marketing", label: "Marketing / Promotions Account", placeholder: "e.g. Advertising & Marketing:Online Order Marketing" },
+    { key: "chargeback", label: platform === "ubereats" ? "Chargeback Account" : "Error Charges Account", placeholder: "e.g. Chargeback" },
+    { key: "adjustments", label: "Adjustments Account", placeholder: "e.g. Other Expense" },
+  ];
+
+  const container = document.getElementById("di-mapping-fields");
+  container.innerHTML = fields.map(f => `
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <label style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-secondary);">${f.label}</label>
+      <input type="text" data-map-key="${f.key}" value="${mapping[f.key] || ""}" placeholder="${f.placeholder}"
+        style="padding:8px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--text-sm);background:var(--color-surface);color:var(--color-text);">
+    </div>
+  `).join("");
+
+  // Show mapping step, hide upload step
+  document.getElementById("di-step-upload").style.display = "none";
+  document.getElementById("di-step-mapping").style.display = "block";
+  document.getElementById("di-step-preview").style.display = "none";
+}
+
+/** Go back to the upload step. */
+function diResetUpload() {
+  diParsedData = null;
+  diCsvContent = "";
+  diEntries = [];
+  document.getElementById("di-step-upload").style.display = "block";
+  document.getElementById("di-step-mapping").style.display = "none";
+  document.getElementById("di-step-preview").style.display = "none";
+  const status = document.getElementById("di-upload-status");
+  if (status) { status.style.display = "none"; status.innerHTML = ""; }
+  const fi = document.getElementById("di-file-input");
+  if (fi) fi.value = "";
+}
+
+/** Generate journal entries from parsed data + mapping, and show preview. */
+async function diGeneratePreview() {
+  if (!diParsedData) return;
+
+  // Gather mapping from input fields
+  const mapping = {};
+  document.querySelectorAll("#di-mapping-fields input[data-map-key]").forEach(inp => {
+    const val = inp.value.trim();
+    if (val) mapping[inp.dataset.mapKey] = val;
+  });
+
+  if (!mapping.bank || !mapping.income) {
+    alert("Please fill in at least the Bank Account and Income Account.");
+    return;
+  }
+
+  const prefix = document.getElementById("di-prefix").value.trim() || "IMPORT";
+  const companyId = document.getElementById("di-company").value;
+
+  // Save mapping for next time
+  try {
+    await fetch(`${API}/api/delivery-import/mapping`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ company_id: companyId, platform: diParsedData.platform, mapping }),
+    });
+  } catch (e) {
+    console.warn("Could not save mapping:", e);
+  }
+
+  // Disable button while generating
+  const btn = document.getElementById("di-generate-btn");
+  btn.disabled = true;
+  btn.textContent = "Generating...";
+
+  try {
+    const resp = await fetch(`${API}/api/delivery-import/csv`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ parsed: diParsedData, mapping, prefix }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to generate CSV");
+    }
+    const data = await resp.json();
+    diCsvContent = data.csv_content;
+    diEntries = data.entries;
+
+    // Show preview
+    _diShowPreviewStep(data);
+  } catch (err) {
+    alert("Error: " + err.message);
+    console.error("diGeneratePreview error:", err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Generate Journal Entries";
+  }
+}
+
+/** Display the preview table and enable download. */
+function _diShowPreviewStep(data) {
+  const platform = diParsedData.platform === "ubereats" ? "Uber Eats" : "DoorDash";
+  document.getElementById("di-preview-info").textContent =
+    `${data.payout_count} payout(s) → ${data.entry_count} journal entry line(s) — ${platform}`;
+
+  const tbody = document.getElementById("di-preview-body");
+  tbody.innerHTML = "";
+
+  let lastJournal = "";
+  for (const e of data.entries) {
+    const isNewJournal = e.journal_no !== lastJournal;
+    lastJournal = e.journal_no;
+    const row = document.createElement("tr");
+    if (isNewJournal) row.style.borderTop = "2px solid var(--color-border)";
+    row.innerHTML = `
+      <td style="font-weight:${isNewJournal ? '600' : '400'};">${isNewJournal ? e.journal_no : ""}</td>
+      <td>${isNewJournal ? e.journal_date : ""}</td>
+      <td>${e.account}</td>
+      <td style="text-align:right;${e.debit ? 'color:var(--color-danger,#dc2626);' : ''}">${e.debit ? "$" + Number(e.debit).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : ""}</td>
+      <td style="text-align:right;${e.credit ? 'color:var(--color-success,#16a34a);' : ''}">${e.credit ? "$" + Number(e.credit).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : ""}</td>
+      <td style="font-size:var(--text-xs);color:var(--color-text-muted);">${e.description || ""}</td>
+    `;
+    tbody.appendChild(row);
+  }
+
+  document.getElementById("di-step-upload").style.display = "none";
+  document.getElementById("di-step-mapping").style.display = "none";
+  document.getElementById("di-step-preview").style.display = "block";
+}
+
+/** Go back to the mapping step from preview. */
+function diBackToMapping() {
+  document.getElementById("di-step-upload").style.display = "none";
+  document.getElementById("di-step-mapping").style.display = "block";
+  document.getElementById("di-step-preview").style.display = "none";
+}
+
+/** Download the generated CSV. */
+function diDownloadCSV() {
+  if (!diCsvContent) { alert("No CSV data available."); return; }
+  const platform = diParsedData.platform === "ubereats" ? "UberEats" : "DoorDash";
+  const period = (diParsedData.statement_period || "Statement").replace(/\s+/g, "_");
+  const filename = `${platform}_JournalEntries_${period}.csv`;
+
+  const blob = new Blob([diCsvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
