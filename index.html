@@ -937,7 +937,10 @@
             <input type="text" id="di-prefix" value="UBER" style="width:160px; padding:8px 12px; border:1.5px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm);">
           </div>
 
-          <button class="btn btn-primary" onclick="diGeneratePreview()" id="di-generate-btn">Generate Journal Entries</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-primary" onclick="diGeneratePreview()" id="di-generate-btn">Generate Journal Entries</button>
+            <button class="btn btn-outline btn-sm" onclick="diSaveMapping()" id="di-save-mapping-btn">Save Mapping</button>
+          </div>
         </div>
 
         <!-- Step 3: Preview & Download -->

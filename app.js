@@ -3126,16 +3126,50 @@ function diResetUpload() {
   if (fi) fi.value = "";
 }
 
-/** Generate journal entries from parsed data + mapping, and show preview. */
-async function diGeneratePreview() {
-  if (!diParsedData) return;
-
-  // Gather mapping from select fields
+/** Gather current mapping from the select dropdowns. */
+function _diGatherMapping() {
   const mapping = {};
   document.querySelectorAll("#di-mapping-fields select[data-map-key]").forEach(sel => {
     const val = sel.value.trim();
     if (val) mapping[sel.dataset.mapKey] = val;
   });
+  return mapping;
+}
+
+/** Save the current mapping to the backend so it persists for next time. */
+async function _diSaveMapping(mapping) {
+  if (!diParsedData) return;
+  const companyId = document.getElementById("di-company").value;
+  if (!companyId) return;
+  try {
+    await fetch(`${API}/api/delivery-import/mapping`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ company_id: companyId, platform: diParsedData.platform, mapping }),
+    });
+  } catch (e) {
+    console.warn("Could not save mapping:", e);
+  }
+}
+
+/** Explicit save button handler — saves mapping and shows confirmation. */
+async function diSaveMapping() {
+  const mapping = _diGatherMapping();
+  await _diSaveMapping(mapping);
+  const btn = document.getElementById("di-save-mapping-btn");
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = "Saved!";
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+  }
+}
+
+/** Generate journal entries from parsed data + mapping, and show preview. */
+async function diGeneratePreview() {
+  if (!diParsedData) return;
+
+  const mapping = _diGatherMapping();
 
   if (!mapping.bank || !mapping.income) {
     alert("Please select at least the Bank Account and Income Account.");
@@ -3146,15 +3180,7 @@ async function diGeneratePreview() {
   const companyId = document.getElementById("di-company").value;
 
   // Save mapping for next time
-  try {
-    await fetch(`${API}/api/delivery-import/mapping`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ company_id: companyId, platform: diParsedData.platform, mapping }),
-    });
-  } catch (e) {
-    console.warn("Could not save mapping:", e);
-  }
+  await _diSaveMapping(mapping);
 
   // Disable button while generating
   const btn = document.getElementById("di-generate-btn");
@@ -3255,12 +3281,9 @@ async function diExportToQBO() {
   const companyId = document.getElementById("di-company").value;
   if (!companyId) { alert("Please select a company."); return; }
 
-  // Gather mapping
-  const mapping = {};
-  document.querySelectorAll("#di-mapping-fields select[data-map-key]").forEach(sel => {
-    const val = sel.value.trim();
-    if (val) mapping[sel.dataset.mapKey] = val;
-  });
+  // Gather mapping and save it
+  const mapping = _diGatherMapping();
+  await _diSaveMapping(mapping);
   const prefix = document.getElementById("di-prefix").value.trim() || "IMPORT";
 
   const btn = document.getElementById("di-export-qbo-btn");
