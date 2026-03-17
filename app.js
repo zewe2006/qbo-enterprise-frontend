@@ -3018,7 +3018,7 @@ async function _diShowMappingStep() {
   const label = document.getElementById("di-platform-label");
   label.textContent = platform === "ubereats" ? "Uber Eats Statement" : "DoorDash Statement";
   const info = document.getElementById("di-store-info");
-  info.textContent = [diParsedData.store_name, diParsedData.statement_period].filter(Boolean).join(" — ");
+  info.textContent = [diParsedData.store_name, diParsedData.statement_period].filter(Boolean).join(" \u2014 ");
 
   // Set default prefix
   document.getElementById("di-prefix").value = platform === "ubereats" ? "UBER" : "DD";
@@ -3032,29 +3032,84 @@ async function _diShowMappingStep() {
     // Use empty — fields will have defaults below
   }
 
+  // Load chart of accounts for this company
+  let accounts = [];
+  try {
+    accounts = await apiGet(`/api/accounts/cached?company_id=${companyId}`);
+  } catch (e) {
+    console.warn("Could not load chart of accounts:", e);
+  }
+
+  // Build grouped <option> list by classification
+  let accountOptionsHtml = '<option value="">-- Select Account --</option>';
+  if (accounts.length) {
+    const grouped = {};
+    for (const a of accounts) {
+      const cls = a.classification || a.account_type || "Other";
+      if (!grouped[cls]) grouped[cls] = [];
+      grouped[cls].push(a);
+    }
+    for (const [cls, accts] of Object.entries(grouped)) {
+      accountOptionsHtml += `<optgroup label="${cls}">`;
+      for (const a of accts) {
+        const fqn = a.fully_qualified_name || a.name;
+        const displayName = fqn.includes(":") ? "\u00A0\u00A0\u00A0" + fqn : fqn;
+        accountOptionsHtml += `<option value="${_escHtml(fqn)}">${_escHtml(displayName)}</option>`;
+      }
+      accountOptionsHtml += "</optgroup>";
+    }
+  }
+
   // Define mapping fields based on platform
   const fields = [
-    { key: "bank", label: "Bank Account (Net Payout)", placeholder: "e.g. Checking" },
-    { key: "income", label: `${platform === "ubereats" ? "Uber Eats" : "DoorDash"} Income Account`, placeholder: platform === "ubereats" ? "e.g. Ubereats" : "e.g. DoorDash" },
-    { key: "fees", label: "Platform Fees Account", placeholder: "e.g. Delivery Fee" },
-    { key: "marketing", label: "Marketing / Promotions Account", placeholder: "e.g. Advertising & Marketing:Online Order Marketing" },
-    { key: "chargeback", label: platform === "ubereats" ? "Chargeback Account" : "Error Charges Account", placeholder: "e.g. Chargeback" },
-    { key: "adjustments", label: "Adjustments Account", placeholder: "e.g. Other Expense" },
+    { key: "bank", label: "Bank Account (Net Payout)" },
+    { key: "income", label: `${platform === "ubereats" ? "Uber Eats" : "DoorDash"} Income Account` },
+    { key: "fees", label: "Platform Fees Account" },
+    { key: "marketing", label: "Marketing / Promotions Account" },
+    { key: "chargeback", label: platform === "ubereats" ? "Chargeback Account" : "Error Charges Account" },
+    { key: "adjustments", label: "Adjustments Account" },
   ];
+
+  const selectStyle = "width:100%;padding:8px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--text-sm);background:var(--color-surface);color:var(--color-text);";
 
   const container = document.getElementById("di-mapping-fields");
   container.innerHTML = fields.map(f => `
     <div style="display:flex;flex-direction:column;gap:4px;">
       <label style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-secondary);">${f.label}</label>
-      <input type="text" data-map-key="${f.key}" value="${mapping[f.key] || ""}" placeholder="${f.placeholder}"
-        style="padding:8px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--text-sm);background:var(--color-surface);color:var(--color-text);">
+      <select data-map-key="${f.key}" style="${selectStyle}">
+        ${accountOptionsHtml}
+      </select>
     </div>
   `).join("");
+
+  // Set saved mapping values
+  for (const f of fields) {
+    if (mapping[f.key]) {
+      const sel = container.querySelector(`select[data-map-key="${f.key}"]`);
+      if (sel) {
+        // Try exact match first
+        if ([...sel.options].some(o => o.value === mapping[f.key])) {
+          sel.value = mapping[f.key];
+        } else {
+          // Try partial match (name without parent)
+          const match = [...sel.options].find(o => o.value && (o.value.endsWith(":" + mapping[f.key]) || o.value === mapping[f.key] || o.textContent.trim() === mapping[f.key]));
+          if (match) sel.value = match.value;
+        }
+      }
+    }
+  }
 
   // Show mapping step, hide upload step
   document.getElementById("di-step-upload").style.display = "none";
   document.getElementById("di-step-mapping").style.display = "block";
   document.getElementById("di-step-preview").style.display = "none";
+}
+
+/** Escape HTML for safe attribute/text insertion. */
+function _escHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 /** Go back to the upload step. */
@@ -3075,15 +3130,15 @@ function diResetUpload() {
 async function diGeneratePreview() {
   if (!diParsedData) return;
 
-  // Gather mapping from input fields
+  // Gather mapping from select fields
   const mapping = {};
-  document.querySelectorAll("#di-mapping-fields input[data-map-key]").forEach(inp => {
-    const val = inp.value.trim();
-    if (val) mapping[inp.dataset.mapKey] = val;
+  document.querySelectorAll("#di-mapping-fields select[data-map-key]").forEach(sel => {
+    const val = sel.value.trim();
+    if (val) mapping[sel.dataset.mapKey] = val;
   });
 
   if (!mapping.bank || !mapping.income) {
-    alert("Please fill in at least the Bank Account and Income Account.");
+    alert("Please select at least the Bank Account and Income Account.");
     return;
   }
 
@@ -3202,9 +3257,9 @@ async function diExportToQBO() {
 
   // Gather mapping
   const mapping = {};
-  document.querySelectorAll("#di-mapping-fields input[data-map-key]").forEach(inp => {
-    const val = inp.value.trim();
-    if (val) mapping[inp.dataset.mapKey] = val;
+  document.querySelectorAll("#di-mapping-fields select[data-map-key]").forEach(sel => {
+    const val = sel.value.trim();
+    if (val) mapping[sel.dataset.mapKey] = val;
   });
   const prefix = document.getElementById("di-prefix").value.trim() || "IMPORT";
 
