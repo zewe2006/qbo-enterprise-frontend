@@ -947,11 +947,16 @@
               <h3 style="font-size:var(--text-base); font-weight:700; margin:0;">Journal Entry Preview</h3>
               <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin:2px 0 0;" id="di-preview-info"></p>
             </div>
-            <div style="display:flex; gap:8px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button class="btn btn-ghost btn-sm" onclick="diBackToMapping()">Back to Mapping</button>
-              <button class="btn btn-primary btn-sm" onclick="diDownloadCSV()">Download CSV</button>
+              <button class="btn btn-outline btn-sm" onclick="diDownloadCSV()">Download CSV</button>
+              <button class="btn btn-primary btn-sm" onclick="diExportToQBO()" id="di-export-qbo-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:4px;vertical-align:middle;"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                Export into QuickBooks
+              </button>
             </div>
           </div>
+          <div id="di-export-status" style="display:none; margin-bottom:16px; padding:12px 16px; border-radius:var(--radius-md); font-size:var(--text-sm);"></div>
           <div style="overflow-x:auto;">
             <table class="data-table" id="di-preview-table">
               <thead>
@@ -960,6 +965,37 @@
               <tbody id="di-preview-body"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Import History Section -->
+      <div class="card" id="di-history-card">
+        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <span class="card-title">Import History</span>
+          <button class="btn btn-ghost btn-sm" onclick="diLoadHistory()">Refresh</button>
+        </div>
+        <div id="di-history-loading" style="padding:24px; text-align:center; display:none;">
+          <div class="loading-spinner" style="margin:0 auto;"></div>
+        </div>
+        <div id="di-history-empty" style="padding:24px; text-align:center; color:var(--color-text-muted); font-size:var(--text-sm); display:none;">
+          No imports yet. Upload a statement above to get started.
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="di-history-table" style="display:none;">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Platform</th>
+                <th>Store</th>
+                <th>Period</th>
+                <th>Payouts</th>
+                <th>Entries</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="di-history-body"></tbody>
+          </table>
         </div>
       </div>
     </section>

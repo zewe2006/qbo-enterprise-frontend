@@ -2929,6 +2929,8 @@ function diInit() {
   // Reset to step 1
   diResetUpload();
   _diSetupDragDrop();
+  // Load history
+  diLoadHistory();
 }
 
 /** Wire up drag-and-drop + click-to-browse on the dropzone. */
@@ -3108,7 +3110,7 @@ async function diGeneratePreview() {
     const resp = await fetch(`${API}/api/delivery-import/csv`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ parsed: diParsedData, mapping, prefix }),
+      body: JSON.stringify({ parsed: diParsedData, mapping, prefix, company_id: companyId }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -3120,6 +3122,8 @@ async function diGeneratePreview() {
 
     // Show preview
     _diShowPreviewStep(data);
+    // Refresh history after generating
+    diLoadHistory();
   } catch (err) {
     alert("Error: " + err.message);
     console.error("diGeneratePreview error:", err);
@@ -3170,11 +3174,15 @@ function diBackToMapping() {
 /** Download the generated CSV. */
 function diDownloadCSV() {
   if (!diCsvContent) { alert("No CSV data available."); return; }
-  const platform = diParsedData.platform === "ubereats" ? "UberEats" : "DoorDash";
-  const period = (diParsedData.statement_period || "Statement").replace(/\s+/g, "_");
-  const filename = `${platform}_JournalEntries_${period}.csv`;
+  _diTriggerCsvDownload(diCsvContent, diParsedData.platform, diParsedData.statement_period);
+}
 
-  const blob = new Blob([diCsvContent], { type: "text/csv;charset=utf-8;" });
+function _diTriggerCsvDownload(csvContent, platform, period) {
+  const platLabel = platform === "ubereats" ? "UberEats" : "DoorDash";
+  const periodLabel = (period || "Statement").replace(/\s+/g, "_");
+  const filename = `${platLabel}_JournalEntries_${periodLabel}.csv`;
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -3183,4 +3191,158 @@ function diDownloadCSV() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/** Export journal entries directly into QuickBooks via API. */
+async function diExportToQBO() {
+  if (!diParsedData) return;
+
+  const companyId = document.getElementById("di-company").value;
+  if (!companyId) { alert("Please select a company."); return; }
+
+  // Gather mapping
+  const mapping = {};
+  document.querySelectorAll("#di-mapping-fields input[data-map-key]").forEach(inp => {
+    const val = inp.value.trim();
+    if (val) mapping[inp.dataset.mapKey] = val;
+  });
+  const prefix = document.getElementById("di-prefix").value.trim() || "IMPORT";
+
+  const btn = document.getElementById("di-export-qbo-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Exporting...';
+
+  const statusEl = document.getElementById("di-export-status");
+  statusEl.style.display = "none";
+
+  try {
+    const resp = await fetch(`${API}/api/delivery-import/export-qbo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ company_id: companyId, parsed: diParsedData, mapping, prefix }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.detail || "Export failed");
+    }
+
+    // Show result
+    if (data.status === "exported") {
+      statusEl.style.display = "block";
+      statusEl.style.background = "var(--color-success-bg, #f0fdf4)";
+      statusEl.style.color = "var(--color-success, #16a34a)";
+      statusEl.innerHTML = `<strong>Successfully exported ${data.posted_count} journal entries</strong> into QuickBooks.`;
+    } else if (data.status === "partial") {
+      statusEl.style.display = "block";
+      statusEl.style.background = "var(--color-warning-bg, #fffbeb)";
+      statusEl.style.color = "var(--color-warning, #d97706)";
+      statusEl.innerHTML = `<strong>Partially exported:</strong> ${data.posted_count} of ${data.total_count} journal entries posted.`
+        + (data.errors ? "<br>Errors: " + data.errors.join("; ") : "");
+    } else {
+      statusEl.style.display = "block";
+      statusEl.style.background = "var(--color-danger-bg, #fef2f2)";
+      statusEl.style.color = "var(--color-danger, #dc2626)";
+      statusEl.innerHTML = `<strong>Export failed.</strong>`
+        + (data.errors ? "<br>" + data.errors.join("<br>") : "");
+    }
+
+    // Refresh history
+    diLoadHistory();
+  } catch (err) {
+    statusEl.style.display = "block";
+    statusEl.style.background = "var(--color-danger-bg, #fef2f2)";
+    statusEl.style.color = "var(--color-danger, #dc2626)";
+    statusEl.innerHTML = `<strong>Error:</strong> ${err.message}`;
+    console.error("diExportToQBO error:", err);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:4px;vertical-align:middle;"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>Export into QuickBooks';
+  }
+}
+
+/* ---- Import History ---- */
+
+async function diLoadHistory() {
+  const loadingEl = document.getElementById("di-history-loading");
+  const emptyEl = document.getElementById("di-history-empty");
+  const tableEl = document.getElementById("di-history-table");
+  const tbody = document.getElementById("di-history-body");
+  if (!loadingEl) return;
+
+  loadingEl.style.display = "block";
+  emptyEl.style.display = "none";
+  tableEl.style.display = "none";
+
+  try {
+    const data = await apiGet("/api/delivery-import/history");
+    const history = data.history || [];
+
+    if (history.length === 0) {
+      emptyEl.style.display = "block";
+      return;
+    }
+
+    // Build company name lookup
+    const companyMap = {};
+    allCompanies.forEach(c => { companyMap[c.id] = c.name; });
+
+    tbody.innerHTML = "";
+    for (const h of history) {
+      const date = h.created_at ? new Date(h.created_at + "Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+      const platform = h.platform === "ubereats" ? "Uber Eats" : h.platform === "doordash" ? "DoorDash" : h.platform;
+      const companyName = companyMap[h.company_id] || h.company_id;
+
+      let statusBadge = "";
+      if (h.status === "exported") {
+        statusBadge = '<span class="badge badge-success" style="font-size:var(--text-xs);">Exported to QBO</span>';
+      } else if (h.status === "partial") {
+        statusBadge = '<span class="badge" style="font-size:var(--text-xs);background:var(--color-warning-bg,#fffbeb);color:var(--color-warning,#d97706);">Partial</span>';
+      } else if (h.status === "failed") {
+        statusBadge = '<span class="badge" style="font-size:var(--text-xs);background:var(--color-danger-bg,#fef2f2);color:var(--color-danger,#dc2626);">Failed</span>';
+      } else {
+        statusBadge = '<span class="badge" style="font-size:var(--text-xs);background:var(--color-info-bg,#eff6ff);color:var(--color-info,#2563eb);">CSV Downloaded</span>';
+      }
+
+      const jeCount = (h.qbo_je_ids || []).length;
+      const jeInfo = jeCount > 0 ? ` <span style="font-size:var(--text-xs);color:var(--color-text-muted);">(${jeCount} JEs)</span>` : "";
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td style="white-space:nowrap;font-size:var(--text-xs);">${date}</td>
+        <td><strong>${platform}</strong></td>
+        <td style="font-size:var(--text-sm);">${h.store_name || companyName}</td>
+        <td style="font-size:var(--text-sm);">${h.statement_period || ""}</td>
+        <td style="text-align:center;">${h.payout_count}</td>
+        <td style="text-align:center;">${h.entry_count}</td>
+        <td>${statusBadge}${jeInfo}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="diDownloadHistoryCSV('${h.id}')" title="Download CSV" style="padding:4px 8px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          </button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    }
+
+    tableEl.style.display = "table";
+  } catch (err) {
+    console.error("diLoadHistory error:", err);
+    emptyEl.textContent = "Could not load import history.";
+    emptyEl.style.display = "block";
+  } finally {
+    loadingEl.style.display = "none";
+  }
+}
+
+async function diDownloadHistoryCSV(historyId) {
+  try {
+    const data = await apiGet(`/api/delivery-import/history/${historyId}/csv`);
+    if (data.csv_content) {
+      _diTriggerCsvDownload(data.csv_content, data.platform, data.statement_period);
+    }
+  } catch (err) {
+    alert("Could not download CSV: " + err.message);
+    console.error("diDownloadHistoryCSV error:", err);
+  }
 }
