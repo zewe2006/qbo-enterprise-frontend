@@ -596,6 +596,27 @@ html, body {
 .by-company-table .total-row:hover td:first-child {
   background: #f0f5ff;
 }
+/* Grouped comparison headers */
+.by-company-table .by-co-group-header th {
+  text-align: center;
+  border-bottom: 1px solid var(--color-border);
+}
+.by-company-table .co-col-group {
+  background: var(--color-surface);
+}
+.by-company-table .total-col-group {
+  background: #f0f4ff;
+  font-weight: 600;
+}
+.by-company-table .sub-hdr {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  padding: 4px 5px;
+  white-space: nowrap;
+}
+.by-company-table .positive { color: var(--color-success, #16a34a); }
+.by-company-table .negative { color: var(--color-danger, #dc2626); }
 
 /* --- Filter Bar --- */
 .filter-bar {

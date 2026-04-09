@@ -934,7 +934,14 @@ function renderByCompanyReport(data, wrapperId) {
   const wrapper = document.getElementById(wrapperId);
   const current = data.current;
   const breakdowns = data.company_breakdowns || {};
+  const priorBreakdowns = data.company_breakdowns_prior || {};
   const companyNames = Object.keys(breakdowns);
+  const priorYear = data.prior_year;
+  const priorMonth = data.prior_month;
+  const hasCmp = !!(priorYear || priorMonth) && Object.keys(priorBreakdowns).length > 0;
+  const cmpLabel = priorYear ? "Prior Year" : priorMonth ? "Prior Month" : "";
+  // Build consolidated prior lookup for Total column comparison
+  const totalPriorLookup = buildReportLookup(priorYear || priorMonth);
 
   if (!current || (!current.Rows && !current.rows)) {
     wrapper.innerHTML = '<p class="text-muted" style="padding:var(--space-4);">No data returned.</p>';
@@ -951,23 +958,57 @@ function renderByCompanyReport(data, wrapperId) {
     return n.replace(/ (LLC|INC|Inc|inc|llc|Group)$/i, "").replace(/^Sweet Hut /, "SH ").replace(/^Food Terminal /, "FT ");
   };
 
-  const colCount = companyNames.length + 2; // Account + each company + Total
+  // Column count: Account + (per company: current [+ prior + $chg + %chg]) + Total [+ prior + $chg + %chg]
+  const colsPerCompany = hasCmp ? 4 : 1;
+  const totalCols = hasCmp ? 4 : 1;
+  const colCount = 1 + (companyNames.length * colsPerCompany) + totalCols;
   const rows = current.Rows || current.rows || {};
   const headerRow = rows.Row || [];
 
-  let html = top + '<table class="data-table by-company-table"><thead><tr><th class="acct-col">Account</th>';
-  for (const cn of companyNames) {
-    html += `<th class="num co-col" title="${cn}">${shortName(cn)}</th>`;
+  let html = top + '<table class="data-table by-company-table">';
+
+  // Two-row header when comparison is active
+  if (hasCmp) {
+    html += "<thead>";
+    // Top row: grouped headers
+    html += '<tr class="by-co-group-header"><th rowspan="2" class="acct-col">Account</th>';
+    for (const cn of companyNames) {
+      html += `<th colspan="4" class="num co-col-group" title="${cn}">${shortName(cn)}</th>`;
+    }
+    html += '<th colspan="4" class="num total-col-group">Total</th></tr>';
+    // Sub-header row
+    html += "<tr>";
+    for (let i = 0; i <= companyNames.length; i++) {
+      html += `<th class="num sub-hdr">Current</th><th class="num sub-hdr">${cmpLabel}</th><th class="num sub-hdr">$ Chg</th><th class="num sub-hdr">% Chg</th>`;
+    }
+    html += "</tr></thead>";
+  } else {
+    html += '<thead><tr><th class="acct-col">Account</th>';
+    for (const cn of companyNames) {
+      html += `<th class="num co-col" title="${cn}">${shortName(cn)}</th>`;
+    }
+    html += '<th class="num total-col">Total</th></tr></thead>';
   }
-  html += '<th class="num total-col">Total</th></tr></thead><tbody>';
-  html += renderByCompanyRows(headerRow, 0, breakdowns, companyNames, colCount);
+
+  html += "<tbody>";
+  html += renderByCompanyRows(headerRow, 0, breakdowns, priorBreakdowns, companyNames, colCount, hasCmp, totalPriorLookup);
   html += "</tbody></table>";
   wrapper.innerHTML = html;
 }
 
-function renderByCompanyRows(arr, depth, breakdowns, companyNames, colCount) {
+function renderByCompanyRows(arr, depth, breakdowns, priorBreakdowns, companyNames, colCount, hasCmp, totalPriorLookup) {
   let h = "";
   const f = (n) => n === 0 ? "$0.00" : (n < 0 ? "\u2212" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fChg = (ch) => (ch >= 0 ? "+" : "") + f(ch);
+  const fPct = (cur, prev) => { if (!prev) return "-"; const pct = ((cur - prev) / Math.abs(prev)) * 100; return (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%"; };
+  const chgClass = (ch) => ch > 0 ? "positive" : ch < 0 ? "negative" : "";
+
+  const renderCmpCells = (cur, prev) => {
+    if (!hasCmp) return "";
+    const ch = cur - prev;
+    const cc = chgClass(ch);
+    return `<td class="num">${f(prev)}</td><td class="num ${cc}">${fChg(ch)}</td><td class="num ${cc}">${fPct(cur, prev)}</td>`;
+  };
 
   for (const r of arr) {
     if (r.type === "Section" || r.group) {
@@ -977,19 +1018,27 @@ function renderByCompanyRows(arr, depth, breakdowns, companyNames, colCount) {
       }
       // Sub-rows
       if (r.Rows?.Row) {
-        h += renderByCompanyRows(r.Rows.Row, depth + 1, breakdowns, companyNames, colCount);
+        h += renderByCompanyRows(r.Rows.Row, depth + 1, breakdowns, priorBreakdowns, companyNames, colCount, hasCmp, totalPriorLookup);
       }
       // Summary / total row
       if (r.Summary?.ColData) {
         const name = r.Summary.ColData[0]?.value || "Total";
         const totalVal = parseFloat(r.Summary.ColData[1]?.value) || 0;
+        const sectionName = r.Header?.ColData?.[0]?.value || "";
         const cls = "total-row";
         h += `<tr class="${cls}"><td>${name}</td>`;
         for (const cn of companyNames) {
-          const cv = (breakdowns[cn] || {})[name] || (breakdowns[cn] || {})[r.Header?.ColData?.[0]?.value || ""] || 0;
+          const cv = (breakdowns[cn] || {})[name] || (breakdowns[cn] || {})[sectionName] || 0;
           h += `<td class="num">${f(cv)}</td>`;
+          if (hasCmp) {
+            const pv = (priorBreakdowns[cn] || {})[name] || (priorBreakdowns[cn] || {})[sectionName] || 0;
+            h += renderCmpCells(cv, pv);
+          }
         }
-        h += `<td class="num total-col-val">${f(totalVal)}</td></tr>`;
+        const totalPv = totalPriorLookup[sectionName] || totalPriorLookup[name] || 0;
+        h += `<td class="num total-col-val">${f(totalVal)}</td>`;
+        h += renderCmpCells(totalVal, totalPv);
+        h += "</tr>";
       }
     } else if (r.ColData) {
       const name = r.ColData[0]?.value || "";
@@ -1001,9 +1050,16 @@ function renderByCompanyRows(arr, depth, breakdowns, companyNames, colCount) {
         const cv = (breakdowns[cn] || {})[name] || 0;
         const cvHtml = name ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${f(cv)}</span>` : f(cv);
         h += `<td class="num">${cvHtml}</td>`;
+        if (hasCmp) {
+          const pv = (priorBreakdowns[cn] || {})[name] || 0;
+          h += renderCmpCells(cv, pv);
+        }
       }
       const totalHtml = name ? `<span class="drilldown-link" onclick="drillDownAccount('${escapedName}')">${f(totalVal)}</span>` : f(totalVal);
-      h += `<td class="num total-col-val">${totalHtml}</td></tr>`;
+      const totalPv = totalPriorLookup[name] || 0;
+      h += `<td class="num total-col-val">${totalHtml}</td>`;
+      h += renderCmpCells(totalVal, totalPv);
+      h += "</tr>";
     }
   }
   return h;
@@ -1020,32 +1076,63 @@ function exportReport(type) {
 
   if (isByCompany) {
     const breakdowns = data.company_breakdowns;
+    const priorBk = data.company_breakdowns_prior || {};
     const companyNames = Object.keys(breakdowns);
-    const header = ["Account", ...companyNames, "Total"];
+    const hasCmpCsv = !!(data.prior_year || data.prior_month) && Object.keys(priorBk).length > 0;
+    const cmpLbl = data.prior_year ? "Prior Year" : "Prior Month";
+    const totalPrior = buildReportLookup(data.prior_year || data.prior_month);
+
+    // Build header
+    const header = ["Account"];
+    for (const cn of companyNames) {
+      header.push(cn);
+      if (hasCmpCsv) header.push(`${cn} ${cmpLbl}`, `${cn} $ Chg`, `${cn} % Chg`);
+    }
+    header.push("Total");
+    if (hasCmpCsv) header.push(`Total ${cmpLbl}`, "Total $ Chg", "Total % Chg");
     const rows = [header];
+
+    const pushCmp = (row, cur, prev) => {
+      if (!hasCmpCsv) return;
+      const ch = cur - prev;
+      const pct = prev ? ((ch / Math.abs(prev)) * 100).toFixed(1) + "%" : "-";
+      row.push(String(prev), String(ch), pct);
+    };
+
     (function walk(arr, d) {
       for (const r of arr) {
         if (r.type === "Section" || r.group) {
           if (r.Header?.ColData) {
             const row = [r.Header.ColData[0]?.value || ""];
-            for (let i = 0; i < companyNames.length + 1; i++) row.push("");
+            for (let i = 1; i < header.length; i++) row.push("");
             rows.push(row);
           }
           if (r.Rows?.Row) walk(r.Rows.Row, d + 1);
           if (r.Summary?.ColData) {
             const name = r.Summary.ColData[0]?.value || "Total";
-            const totalVal = r.Summary.ColData[1]?.value || "0";
+            const totalVal = parseFloat(r.Summary.ColData[1]?.value) || 0;
+            const sectionName = r.Header?.ColData?.[0]?.value || "";
             const row = ["  " + name];
-            for (const cn of companyNames) row.push(String((breakdowns[cn] || {})[name] || 0));
-            row.push(totalVal);
+            for (const cn of companyNames) {
+              const cv = (breakdowns[cn] || {})[name] || (breakdowns[cn] || {})[sectionName] || 0;
+              row.push(String(cv));
+              if (hasCmpCsv) { const pv = (priorBk[cn] || {})[name] || (priorBk[cn] || {})[sectionName] || 0; pushCmp(row, cv, pv); }
+            }
+            row.push(String(totalVal));
+            if (hasCmpCsv) { const tpv = totalPrior[sectionName] || totalPrior[name] || 0; pushCmp(row, totalVal, tpv); }
             rows.push(row);
           }
         } else if (r.ColData) {
           const name = r.ColData[0]?.value || "";
-          const totalVal = r.ColData[1]?.value || "0";
+          const totalVal = parseFloat(r.ColData[1]?.value) || 0;
           const row = ["  ".repeat(d) + name];
-          for (const cn of companyNames) row.push(String((breakdowns[cn] || {})[name] || 0));
-          row.push(totalVal);
+          for (const cn of companyNames) {
+            const cv = (breakdowns[cn] || {})[name] || 0;
+            row.push(String(cv));
+            if (hasCmpCsv) { const pv = (priorBk[cn] || {})[name] || 0; pushCmp(row, cv, pv); }
+          }
+          row.push(String(totalVal));
+          if (hasCmpCsv) { const tpv = totalPrior[name] || 0; pushCmp(row, totalVal, tpv); }
           rows.push(row);
         }
       }
