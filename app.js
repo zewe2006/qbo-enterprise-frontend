@@ -2409,6 +2409,7 @@ async function loadUsers() {
         <td style="font-size:var(--text-xs);white-space:nowrap;">${u.created_at ? u.created_at.split("T")[0] : "-"}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm btn-secondary" onclick='openEditUser(${JSON.stringify(u).replace(/'/g, "&apos;")})'>Edit</button>
+          <button class="btn btn-sm btn-ghost" onclick="openApiTokenModal('${u.id}','${u.name || u.email}','${u.email}')" title="Manage API tokens">&#128273; Token</button>
           ${isSelf ? "" : `<button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteUser('${u.id}','${u.email}')">Delete</button>`}
         </td>
       </tr>`;
@@ -2485,6 +2486,90 @@ async function deleteUser(userId, email) {
     await apiDelete(`/api/users/${userId}`);
     showToast(`User "${email}" deleted.`, "success");
     loadUsers();
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
+}
+
+// --- API Token Management ---
+let apiTokenCurrentUserId = null;
+
+async function openApiTokenModal(userId, name, email) {
+  apiTokenCurrentUserId = userId;
+  document.getElementById("api-token-user-info").innerHTML =
+    `<strong>${name}</strong> &middot; ${email}`;
+  document.getElementById("api-token-new-container").style.display = "none";
+  document.getElementById("api-token-value").value = "";
+  document.getElementById("api-token-copy-btn").textContent = "Copy";
+  document.getElementById("api-token-modal").classList.add("open");
+  await loadApiTokenSessions();
+}
+
+async function loadApiTokenSessions() {
+  const listEl = document.getElementById("api-token-sessions-list");
+  listEl.innerHTML = '<span style="color:var(--color-text-tertiary);">Loading...</span>';
+  try {
+    const data = await apiGet(`/api/users/${apiTokenCurrentUserId}/sessions`);
+    if (!data.sessions || data.sessions.length === 0) {
+      listEl.innerHTML = '<span style="color:var(--color-text-tertiary);font-size:var(--text-xs);">No active tokens.</span>';
+      return;
+    }
+    listEl.innerHTML = data.sessions.map(s =>
+      `<div style="padding:6px 10px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);margin-bottom:4px;font-family:monospace;font-size:var(--text-xs);">${s.token_preview}</div>`
+    ).join("");
+  } catch (e) {
+    listEl.innerHTML = `<span style="color:var(--color-error);font-size:var(--text-xs);">Error: ${e.message}</span>`;
+  }
+}
+
+async function generateApiToken() {
+  if (!apiTokenCurrentUserId) return;
+  try {
+    const data = await apiPost(`/api/users/${apiTokenCurrentUserId}/generate-token`, {});
+    document.getElementById("api-token-value").value = data.token;
+    document.getElementById("api-token-new-container").style.display = "block";
+    document.getElementById("api-token-copy-btn").textContent = "Copy";
+    showToast("New API token generated.", "success");
+    await loadApiTokenSessions();
+  } catch (e) {
+    showToast("Error generating token: " + e.message, "error");
+  }
+}
+
+async function copyApiToken() {
+  const input = document.getElementById("api-token-value");
+  const btn = document.getElementById("api-token-copy-btn");
+  try {
+    await navigator.clipboard.writeText(input.value);
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  } catch {
+    input.select();
+    document.execCommand("copy");
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  }
+}
+
+async function revokeAllApiTokens() {
+  if (!apiTokenCurrentUserId) return;
+  const isSelf = apiTokenCurrentUserId === currentUser.id;
+  const warn = isSelf
+    ? "Revoke ALL your tokens? This will log you out immediately. Continue?"
+    : "Revoke ALL API tokens for this user? Any integrations using these tokens will stop working.";
+  if (!confirm(warn)) return;
+  try {
+    const data = await apiDelete(`/api/users/${apiTokenCurrentUserId}/sessions`);
+    showToast(`Revoked ${data.revoked} token(s).`, "success");
+    if (isSelf) {
+      // Log out self
+      authToken = null;
+      currentUser = null;
+      location.reload();
+      return;
+    }
+    await loadApiTokenSessions();
+    document.getElementById("api-token-new-container").style.display = "none";
   } catch (e) {
     showToast("Error: " + e.message, "error");
   }

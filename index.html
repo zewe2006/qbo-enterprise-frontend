@@ -1086,6 +1086,46 @@
   </div>
 </div>
 
+<!-- ======== MODAL: API Token ======== -->
+<div id="api-token-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:620px;">
+    <div class="modal-header">
+      <h3>API Token</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('api-token-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4);">
+      <div id="api-token-user-info" style="margin-bottom:var(--space-4);font-size:var(--text-sm);color:var(--color-text-secondary);"></div>
+
+      <div id="api-token-new-container" style="display:none;">
+        <div style="background:#fffbeb;border:1px solid #fbbf24;color:#92400e;padding:12px;border-radius:var(--radius-md);margin-bottom:var(--space-3);font-size:var(--text-sm);">
+          <strong>&#9888; Copy this token now.</strong> For security, the full token will not be shown again after you close this dialog.
+        </div>
+        <label class="form-label">Bearer Token</label>
+        <div style="display:flex;gap:8px;align-items:stretch;">
+          <input id="api-token-value" class="form-input" type="text" readonly style="font-family:monospace;font-size:var(--text-xs);">
+          <button class="btn btn-primary" onclick="copyApiToken()" id="api-token-copy-btn">Copy</button>
+        </div>
+        <div style="margin-top:var(--space-3);font-size:var(--text-xs);color:var(--color-text-secondary);">
+          Use as: <code>Authorization: Bearer &lt;token&gt;</code>
+        </div>
+      </div>
+
+      <div style="margin-top:var(--space-4);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-2);">
+          <label class="form-label" style="margin:0;">Active Tokens</label>
+          <button class="btn btn-sm btn-secondary" onclick="generateApiToken()">+ Generate New Token</button>
+        </div>
+        <div id="api-token-sessions-list" style="font-size:var(--text-sm);color:var(--color-text-secondary);"></div>
+      </div>
+
+      <div style="display:flex;gap:var(--space-3);margin-top:var(--space-4);justify-content:space-between;">
+        <button class="btn btn-ghost" style="color:var(--color-error);" onclick="revokeAllApiTokens()">Revoke All Tokens</button>
+        <button class="btn btn-ghost" onclick="closeModal('api-token-modal')">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ======== MODAL: Transaction Detail Drill-Down ======== -->
 <div id="txn-detail-modal" class="modal-overlay">
   <div class="modal-content" style="max-width:95vw;width:1200px;">
