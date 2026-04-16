@@ -544,7 +544,9 @@ function updateKPIs(data) {
 
   const pLabel = data.period_label || "Last Month";
   const cur = data.current_pl, prior = data.prior_pl;
-  const rev = secTotal(cur, "Income"), exp = secTotal(cur, "Expenses");
+  const rev = secTotal(cur, "Income");
+  // Expenses = Operating Expenses + COGS + Other Expenses
+  const exp = secTotal(cur, "Expenses") + secTotal(cur, "CostOfGoodsSold") + secTotal(cur, "OtherExpense");
   const net = (() => {
     if (!cur) return 0;
     try {
@@ -582,8 +584,8 @@ function updateKPIs(data) {
     revDelta.textContent = "";
   }
 
-  // Expenses delta
-  const priorExp = secTotal(prior, "Expenses");
+  // Expenses delta (include COGS + Other Expenses to match current-period total)
+  const priorExp = secTotal(prior, "Expenses") + secTotal(prior, "CostOfGoodsSold") + secTotal(prior, "OtherExpense");
   const expDelta = document.getElementById("kpi-expenses-delta");
   if (priorExp && exp) {
     const pct = ((Math.abs(exp) - Math.abs(priorExp)) / Math.abs(priorExp) * 100).toFixed(1);
