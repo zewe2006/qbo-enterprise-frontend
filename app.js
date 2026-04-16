@@ -546,7 +546,8 @@ function updateKPIs(data) {
   const cur = data.current_pl, prior = data.prior_pl;
   const rev = secTotal(cur, "Income");
   // Expenses = Operating Expenses + COGS + Other Expenses
-  const exp = secTotal(cur, "Expenses") + secTotal(cur, "CostOfGoodsSold") + secTotal(cur, "OtherExpense");
+  // (QBO group keys: COGS and OtherExpenses — not CostOfGoodsSold / OtherExpense)
+  const exp = secTotal(cur, "Expenses") + secTotal(cur, "COGS") + secTotal(cur, "OtherExpenses");
   const net = (() => {
     if (!cur) return 0;
     try {
@@ -585,7 +586,7 @@ function updateKPIs(data) {
   }
 
   // Expenses delta (include COGS + Other Expenses to match current-period total)
-  const priorExp = secTotal(prior, "Expenses") + secTotal(prior, "CostOfGoodsSold") + secTotal(prior, "OtherExpense");
+  const priorExp = secTotal(prior, "Expenses") + secTotal(prior, "COGS") + secTotal(prior, "OtherExpenses");
   const expDelta = document.getElementById("kpi-expenses-delta");
   if (priorExp && exp) {
     const pct = ((Math.abs(exp) - Math.abs(priorExp)) / Math.abs(priorExp) * 100).toFixed(1);
@@ -740,7 +741,7 @@ function extractExpenseCategories(report) {
   const cats = [];
   try {
     for (const sec of (report.Rows || {}).Row || []) {
-      if (sec.group === "Expenses" || sec.group === "CostOfGoodsSold") {
+      if (sec.group === "Expenses" || sec.group === "COGS" || sec.group === "OtherExpenses") {
         for (const row of (sec.Rows?.Row || [])) {
           if (row.type === "Section" && row.Summary) {
             const n = row.Header?.ColData?.[0]?.value || "Other";
