@@ -4453,6 +4453,7 @@ function ddRenderKpis(resp) {
     <div class="dd-kpi">
       <div class="dd-kpi-label">Dividends paid</div>
       <div class="dd-kpi-value">${formatMoney(k.dividends_paid.current)}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Pro-rata ${formatMoney((k.dividends_pro_rata && k.dividends_pro_rata.current) || 0)} · MB ${formatMoney((k.managing_bonus_paid && k.managing_bonus_paid.current) || 0)}</div>
       ${delta(k.dividends_paid.current, k.dividends_paid.prior, false)}
     </div>
     <div class="dd-kpi ${payoutAlert}">
@@ -4626,8 +4627,28 @@ function ddRenderConcentration(resp) {
   const tbl = document.getElementById("dd-concentration-table");
   tbl.innerHTML = list.length ? `
     <table class="data-table" style="width:100%; font-size:var(--text-xs);">
-      <thead><tr><th>Shareholder</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Share</th></tr></thead>
-      <tbody>${list.map((s) => `<tr><td>${escapeHtml(s.shareholder_name)}</td><td style="text-align:right;">${formatMoney(s.total_paid)}</td><td style="text-align:right;">${(s.share_of_total * 100).toFixed(1)}%</td></tr>`).join("")}</tbody>
+      <thead><tr>
+        <th>Shareholder</th>
+        <th style="text-align:right;">Pro-rata</th>
+        <th style="text-align:right;">MB</th>
+        <th style="text-align:right;">Total</th>
+        <th style="text-align:right;">Expected</th>
+        <th style="text-align:right;">Variance</th>
+        <th style="text-align:right;">Share</th>
+      </tr></thead>
+      <tbody>${list.map((s) => {
+        const v = s.pro_rata_variance;
+        const vClass = v == null ? "" : (v > 0 ? "up" : (v < 0 ? "down" : ""));
+        return `<tr>
+          <td>${escapeHtml(s.shareholder_name)}</td>
+          <td style="text-align:right;">${formatMoney(s.pro_rata_paid || 0)}</td>
+          <td style="text-align:right;">${formatMoney(s.managing_bonus_paid || 0)}</td>
+          <td style="text-align:right; font-weight:600;">${formatMoney(s.total_paid)}</td>
+          <td style="text-align:right; color:var(--color-text-muted);">${s.expected_pro_rata == null ? "—" : formatMoney(s.expected_pro_rata)}</td>
+          <td style="text-align:right;" class="dd-kpi-delta ${vClass}">${v == null ? "—" : (v > 0 ? "+" : "") + formatMoney(v)}</td>
+          <td style="text-align:right;">${(s.share_of_total * 100).toFixed(1)}%</td>
+        </tr>`;
+      }).join("")}</tbody>
     </table>
   ` : `<div style="padding:12px; color:var(--color-text-muted); font-size:var(--text-sm);">No distributions in this period.</div>`;
 }
