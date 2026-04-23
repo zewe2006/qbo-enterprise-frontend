@@ -164,6 +164,8 @@ function showApp() {
   if (navBilling) navBilling.style.display = currentUser.role === "admin" ? "" : "none";
   const navKB = document.getElementById("nav-knowledge-base");
   if (navKB) navKB.style.display = currentUser.role === "admin" ? "" : "none";
+  const navShSec = document.getElementById("nav-shareholders-section");
+  if (navShSec) navShSec.style.display = currentUser.role === "admin" ? "" : "none";
   applyRoleRestrictions();
   updateTrialBanner();
   initDefaultDates();
@@ -426,6 +428,7 @@ function navigateTo(page) {
     billing: "Billing & Subscription",
     "knowledge-base": "AI Knowledge Base",
     "delivery-import": "UberEats / DoorDash Import",
+    shareholders: "Shareholder Dividends",
   };
   // Block non-admin from users page
   if (page === "users" && currentUser && currentUser.role !== "admin") {
@@ -440,6 +443,10 @@ function navigateTo(page) {
   if (page === "billing") loadBilling();
   if (page === "knowledge-base") loadKnowledgeBase();
   if (page === "delivery-import") diInit();
+  if (page === "shareholders") {
+    if (currentUser && currentUser.role !== "admin") { location.hash = "dashboard"; return; }
+    loadShareholders();
+  }
 }
 
 window.addEventListener("hashchange", () => {
@@ -3709,3 +3716,1020 @@ function diCloseHistoryPreview() {
   modal.classList.remove("active");
   modal.classList.remove("open");
 }
+
+// =====================================================================
+//  SHAREHOLDER DIVIDENDS
+// =====================================================================
+
+let shAllShareholders = [];
+let shCompaniesCache = null;   // list of {id, name}
+let shAccountsByCompany = {};  // company_id -> [{id, name, type, sub_type}]
+let currentShareholderId = null;
+let currentShEvents = [];
+let currentShBalances = null;
+let currentShLinks = [];
+let shCurrentTab = "balances";
+
+async function shFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+      Authorization: "Bearer " + authToken,
+    },
+  });
+  if (!res.ok) {
+    let msg = "Request failed";
+    try { const j = await res.json(); msg = j.detail || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function loadShareholders() {
+  try {
+    const includeInactive = !!(document.getElementById("sh-include-inactive") && document.getElementById("sh-include-inactive").checked);
+    shAllShareholders = await shFetch("/api/shareholders" + (includeInactive ? "?include_inactive=true" : ""));
+  } catch (e) {
+    shAllShareholders = [];
+    console.error("Failed to load shareholders:", e);
+  }
+  renderShareholderList();
+  if (!currentShareholderId && shAllShareholders.length) {
+    selectShareholder(shAllShareholders[0].id);
+  } else if (currentShareholderId) {
+    const still = shAllShareholders.find((s) => s.id === currentShareholderId);
+    if (!still) { currentShareholderId = null; renderShareholderDetail(); }
+  }
+}
+
+function renderShareholderList() {
+  const ul = document.getElementById("sh-list");
+  if (!ul) return;
+  const q = (document.getElementById("sh-search")?.value || "").toLowerCase().trim();
+  const filtered = shAllShareholders.filter((s) => {
+    if (!q) return true;
+    return (s.display_name || "").toLowerCase().includes(q) || (s.short_name || "").toLowerCase().includes(q);
+  });
+  ul.innerHTML = filtered.map((s) => `
+    <li>
+      <a data-id="${s.id}" class="${s.id === currentShareholderId ? "active" : ""}" onclick="selectShareholder('${s.id}')">
+        <span class="sh-item-name">${escapeHtml(s.display_name)}</span>
+        <span class="sh-item-meta ${s.active ? "" : "inactive"}">
+          ${s.active ? "" : "Inactive · "}${s.linked_account_count || 0} linked account${s.linked_account_count === 1 ? "" : "s"}
+        </span>
+      </a>
+    </li>
+  `).join("") || '<li style="padding:16px; color:var(--color-text-muted); font-size:var(--text-sm); text-align:center;">No shareholders yet.</li>';
+}
+
+async function selectShareholder(id) {
+  currentShareholderId = id;
+  shCurrentTab = "balances";
+  renderShareholderList();
+  renderShareholderDetail();
+  await Promise.all([loadBalances(), loadEvents(), loadLinks()]);
+}
+
+function renderShareholderDetail() {
+  const empty = document.getElementById("sh-detail-empty");
+  const body = document.getElementById("sh-detail-body");
+  if (!currentShareholderId) {
+    if (empty) empty.style.display = "flex";
+    if (body) body.style.display = "none";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+  if (body) body.style.display = "block";
+  const s = shAllShareholders.find((x) => x.id === currentShareholderId);
+  if (!s) return;
+  document.getElementById("sh-detail-name").textContent = s.display_name;
+  document.getElementById("sh-detail-meta").textContent =
+    `${s.active ? "Active" : "Inactive"} · ${s.linked_account_count || 0} linked account${s.linked_account_count === 1 ? "" : "s"}${s.short_name ? " · short: " + s.short_name : ""}`;
+  selectShTab(shCurrentTab);
+}
+
+function selectShTab(tab) {
+  shCurrentTab = tab;
+  document.querySelectorAll(".sh-tab").forEach((b) => b.classList.toggle("active", b.dataset.shTab === tab));
+  ["balances", "events", "recon", "links"].forEach((t) => {
+    const el = document.getElementById("sh-tab-" + t);
+    if (el) el.style.display = t === tab ? "block" : "none";
+  });
+  if (tab === "recon") populateReconCompanies();
+}
+
+async function loadBalances() {
+  if (!currentShareholderId) return;
+  const el = document.getElementById("sh-balances-content");
+  if (!el) return;
+  el.innerHTML = '<div class="loading-placeholder" style="padding:24px; text-align:center; color:var(--color-text-muted);">Loading balances...</div>';
+  try {
+    currentShBalances = await shFetch(`/api/shareholders/${currentShareholderId}/balances`);
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--color-error); padding:12px;">Failed to load: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const b = currentShBalances;
+  if (!b.companies.length) {
+    el.innerHTML = `<div style="padding:12px; color:var(--color-text-muted); font-size:var(--text-sm);">No account links yet. Go to the <a href="#" onclick="selectShTab('links'); return false;">Account links</a> tab and add one.</div>`;
+    return;
+  }
+  const rows = b.companies.map((c) => `
+    <tr>
+      <td>${escapeHtml(c.company_name || c.company_id)}</td>
+      <td style="text-align:right;">${formatMoney(c.total_balance)}</td>
+      <td style="font-size:var(--text-xs); color:var(--color-text-muted);">
+        ${c.accounts.map((a) => `${escapeHtml(a.qbo_account_name)} (${formatMoney(a.current_balance)})`).join("<br>")}
+      </td>
+    </tr>
+  `).join("");
+  el.innerHTML = `
+    <table class="data-table" style="width:100%;">
+      <thead><tr><th>Company</th><th style="text-align:right;">Balance</th><th>Accounts</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><th>Total</th><th style="text-align:right;">${formatMoney(b.total_balance)}</th><th></th></tr></tfoot>
+    </table>`;
+}
+
+async function loadEvents() {
+  if (!currentShareholderId) return;
+  const el = document.getElementById("sh-events-content");
+  if (!el) return;
+  el.innerHTML = '<div class="loading-placeholder" style="padding:24px; text-align:center; color:var(--color-text-muted);">Loading...</div>';
+  try {
+    currentShEvents = await shFetch(`/api/dividend-events?shareholder_id=${currentShareholderId}`);
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--color-error); padding:12px;">Failed to load: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  if (!currentShEvents.length) {
+    el.innerHTML = `<div style="padding:12px; color:var(--color-text-muted); font-size:var(--text-sm);">No events yet. Use "Record payment" above to create one.</div>`;
+    return;
+  }
+  const rows = currentShEvents.map((e) => `
+    <tr>
+      <td>${escapeHtml(e.event_date)}</td>
+      <td>${escapeHtml(e.company_name || e.company_id)}</td>
+      <td style="text-align:right;">${formatMoney(e.amount)}</td>
+      <td><span class="pill pill-${e.qbo_post_status}">${escapeHtml(e.qbo_post_status)}</span></td>
+      <td style="font-size:var(--text-xs); color:var(--color-text-muted);">${escapeHtml(e.source)}${e.qbo_je_id ? " · JE " + escapeHtml(e.qbo_je_id) : ""}</td>
+      <td>${escapeHtml(e.memo || "")}</td>
+      <td>${e.qbo_post_status !== "voided" ? `<button class="btn btn-ghost btn-sm" onclick="voidEvent('${e.id}')">Void</button>` : ""}</td>
+    </tr>
+  `).join("");
+  el.innerHTML = `
+    <table class="data-table" style="width:100%;">
+      <thead><tr><th>Date</th><th>Company</th><th style="text-align:right;">Amount</th><th>Status</th><th>Source</th><th>Memo</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function voidEvent(eventId) {
+  if (!confirm("Void this event? If it was posted to QBO, a reversing journal entry will be posted.")) return;
+  try {
+    await shFetch(`/api/dividend-events/${eventId}/void`, { method: "POST" });
+    await loadEvents();
+    await loadBalances();
+  } catch (e) {
+    alert("Void failed: " + e.message);
+  }
+}
+
+async function loadLinks() {
+  if (!currentShareholderId) return;
+  const el = document.getElementById("sh-links-content");
+  if (!el) return;
+  el.innerHTML = '<div class="loading-placeholder" style="padding:24px; text-align:center; color:var(--color-text-muted);">Loading...</div>';
+  try {
+    currentShLinks = await shFetch(`/api/shareholders/${currentShareholderId}/account-links`);
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--color-error); padding:12px;">Failed to load: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const companies = await getCompanies();
+  const companyOpts = companies.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+  const rows = currentShLinks.map((l) => `
+    <tr>
+      <td>${escapeHtml(l.company_name || l.company_id)}</td>
+      <td>${escapeHtml(l.qbo_account_name)}</td>
+      <td><span class="pill">${escapeHtml(l.account_kind)}</span></td>
+      <td>${l.is_default_for_writes ? "★" : ""}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="removeAccountLink('${l.id}')">Remove</button></td>
+    </tr>
+  `).join("");
+  el.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <table class="data-table" style="width:100%;">
+        <thead><tr><th>Company</th><th>QBO account</th><th>Kind</th><th>Default</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" style="padding:12px; color:var(--color-text-muted);">No links yet.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="card" style="background:var(--color-surface-offset);">
+      <h4 style="margin:0 0 10px; font-size:var(--text-sm);">Add an account link</h4>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:end;">
+        <div><label style="font-size:var(--text-xs);">Company</label><select id="link-company" onchange="onLinkCompanyChange()" style="width:100%; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md);"><option value="">Select...</option>${companyOpts}</select></div>
+        <div><label style="font-size:var(--text-xs);">QBO account</label><select id="link-account" style="width:100%; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md);"><option value="">Pick a company first</option></select></div>
+        <div><label style="font-size:var(--text-xs);">Kind</label><select id="link-kind" style="width:100%; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md);"><option value="drawing">drawing</option><option value="dividend_payable">dividend_payable</option></select></div>
+        <button class="btn btn-primary btn-sm" onclick="addAccountLink()">Add</button>
+      </div>
+    </div>`;
+}
+
+async function onLinkCompanyChange() {
+  const cid = document.getElementById("link-company").value;
+  const sel = document.getElementById("link-account");
+  if (!cid) { sel.innerHTML = '<option value="">Pick a company first</option>'; return; }
+  const accounts = await getAccountsForCompany(cid);
+  // prefer drawing/equity-like names up top
+  const sorted = accounts.slice().sort((a, b) => {
+    const ak = /drawing|dividend/i.test(a.name) ? 0 : 1;
+    const bk = /drawing|dividend/i.test(b.name) ? 0 : 1;
+    return ak - bk || a.name.localeCompare(b.name);
+  });
+  sel.innerHTML = '<option value="">Select...</option>' + sorted.map((a) => `
+    <option value="${a.id}" data-name="${escapeAttr(a.name)}">${escapeHtml(a.name)} — ${escapeHtml(a.type || "")}</option>
+  `).join("");
+}
+
+async function addAccountLink() {
+  const cid = document.getElementById("link-company").value;
+  const accSel = document.getElementById("link-account");
+  const qid = accSel.value;
+  const qname = accSel.options[accSel.selectedIndex]?.dataset?.name;
+  const kind = document.getElementById("link-kind").value;
+  if (!cid || !qid || !qname) { alert("Pick a company and QBO account."); return; }
+  try {
+    await shFetch(`/api/shareholders/${currentShareholderId}/account-links`, {
+      method: "POST",
+      body: JSON.stringify({ company_id: cid, qbo_account_id: qid, qbo_account_name: qname, account_kind: kind }),
+    });
+    await loadShareholders();
+    await loadLinks();
+    await loadBalances();
+  } catch (e) {
+    alert("Add link failed: " + e.message);
+  }
+}
+
+async function removeAccountLink(linkId) {
+  if (!confirm("Remove this account link? Event history is preserved.")) return;
+  try {
+    await shFetch(`/api/shareholders/${currentShareholderId}/account-links/${linkId}`, { method: "DELETE" });
+    await loadShareholders();
+    await loadLinks();
+    await loadBalances();
+  } catch (e) {
+    alert("Remove failed: " + e.message);
+  }
+}
+
+// --- Record Payment modal ---
+async function openRecordPayment() {
+  if (!currentShareholderId) { alert("Select a shareholder first."); return; }
+  const s = shAllShareholders.find((x) => x.id === currentShareholderId);
+  document.getElementById("dp-shareholder-name").value = s ? s.display_name : "";
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById("dp-date").value = today;
+  document.getElementById("dp-amount").value = "";
+  document.getElementById("dp-memo").value = "";
+  document.getElementById("dp-post-to-qbo").checked = true;
+  document.getElementById("dp-error").style.display = "none";
+  const companies = await getCompanies();
+  const linked = (await shFetch(`/api/shareholders/${currentShareholderId}/account-links`)) || [];
+  const linkedCompanyIds = new Set(linked.map((l) => l.company_id));
+  const sel = document.getElementById("dp-company");
+  sel.innerHTML = companies.map((c) => {
+    const badge = linkedCompanyIds.has(c.id) ? " (linked)" : "";
+    return `<option value="${c.id}">${escapeHtml(c.name)}${badge}</option>`;
+  }).join("");
+  // Prefer first linked company
+  if (linked.length) sel.value = linked[0].company_id;
+  await dpOnCompanyChange();
+  openModal("div-payment-modal");
+}
+
+async function dpOnCompanyChange() {
+  const cid = document.getElementById("dp-company").value;
+  const accounts = await getAccountsForCompany(cid);
+  const cashList = document.getElementById("dp-cash-accounts");
+  const drawList = document.getElementById("dp-drawing-accounts");
+  cashList.innerHTML = accounts.filter((a) => /bank|cash/i.test(a.type || "")).map((a) => `<option value="${escapeAttr(a.name)}">`).join("");
+  drawList.innerHTML = accounts.map((a) => `<option value="${escapeAttr(a.name)}">`).join("");
+  // Pre-fill drawing account from default link for this (shareholder, company)
+  const linked = currentShLinks.filter((l) => l.company_id === cid);
+  const def = linked.find((l) => l.is_default_for_writes && l.account_kind === "drawing") || linked[0];
+  document.getElementById("dp-drawing").value = def ? def.qbo_account_name : "";
+}
+
+async function submitRecordPayment() {
+  const cid = document.getElementById("dp-company").value;
+  const date = document.getElementById("dp-date").value;
+  const amt = parseFloat(document.getElementById("dp-amount").value);
+  const drawing = document.getElementById("dp-drawing").value.trim() || null;
+  const cash = document.getElementById("dp-cash").value.trim() || null;
+  const memo = document.getElementById("dp-memo").value;
+  const post = document.getElementById("dp-post-to-qbo").checked;
+  const err = document.getElementById("dp-error");
+  err.style.display = "none";
+  if (!cid || !date || !amt || amt <= 0) { err.textContent = "Company, date, and positive amount required."; err.style.display = "block"; return; }
+  if (post && !cash) { err.textContent = "Cash account required when posting to QBO."; err.style.display = "block"; return; }
+  const btn = document.getElementById("dp-submit");
+  btn.disabled = true; btn.textContent = "Saving...";
+  try {
+    await shFetch("/api/dividend-events", {
+      method: "POST",
+      body: JSON.stringify({
+        shareholder_id: currentShareholderId,
+        company_id: cid,
+        event_date: date,
+        amount: amt,
+        drawing_account_name: drawing,
+        cash_account_name: cash,
+        memo: memo || null,
+        post_to_qbo: post,
+      }),
+    });
+    closeModal("div-payment-modal");
+    await loadEvents();
+    await loadBalances();
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+  } finally {
+    btn.disabled = false; btn.textContent = "Save payment";
+  }
+}
+
+// --- Shareholder editor modal ---
+function openShareholderEditor(id) {
+  const editing = id ? shAllShareholders.find((s) => s.id === id) : null;
+  document.getElementById("sh-editor-title").textContent = editing ? "Edit shareholder" : "Add shareholder";
+  document.getElementById("she-display-name").value = editing ? editing.display_name : "";
+  document.getElementById("she-short-name").value = editing ? (editing.short_name || "") : "";
+  document.getElementById("she-notes").value = editing ? (editing.notes || "") : "";
+  document.getElementById("she-active").checked = editing ? editing.active : true;
+  document.getElementById("she-error").style.display = "none";
+  document.getElementById("sh-editor-modal").dataset.editingId = id || "";
+  openModal("sh-editor-modal");
+}
+
+async function saveShareholder() {
+  const id = document.getElementById("sh-editor-modal").dataset.editingId || null;
+  const payload = {
+    display_name: document.getElementById("she-display-name").value.trim(),
+    short_name: document.getElementById("she-short-name").value.trim() || null,
+    notes: document.getElementById("she-notes").value || null,
+    active: document.getElementById("she-active").checked,
+  };
+  const err = document.getElementById("she-error");
+  err.style.display = "none";
+  if (!payload.display_name) { err.textContent = "Display name required."; err.style.display = "block"; return; }
+  try {
+    if (id) await shFetch(`/api/shareholders/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+    else {
+      const created = await shFetch("/api/shareholders", { method: "POST", body: JSON.stringify(payload) });
+      currentShareholderId = created.id;
+    }
+    closeModal("sh-editor-modal");
+    await loadShareholders();
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+  }
+}
+
+// --- CSV import modal ---
+let parsedCsvRows = null;
+
+function openCsvImport() {
+  parsedCsvRows = null;
+  document.getElementById("div-csv-file").value = "";
+  document.getElementById("div-csv-preview").innerHTML = "";
+  document.getElementById("div-csv-commit").disabled = true;
+  openModal("div-csv-modal");
+  document.getElementById("div-csv-file").onchange = (e) => {
+    const f = e.target.files[0];
+    if (f) previewCsvImport(f);
+  };
+}
+
+async function previewCsvImport(file) {
+  const text = await file.text();
+  // crude CSV parse — expects header row: date,shareholder,company,amount,memo
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return;
+  const header = lines[0].toLowerCase().split(",").map((h) => h.trim());
+  const iDate = header.indexOf("date");
+  const iSh = header.findIndex((h) => /shareholder|person|name/.test(h));
+  const iCo = header.findIndex((h) => /company|store|location/.test(h));
+  const iAmt = header.findIndex((h) => /amount|amt|value/.test(h));
+  const iMemo = header.findIndex((h) => /memo|note|description/.test(h));
+  if (iDate < 0 || iSh < 0 || iCo < 0 || iAmt < 0) {
+    document.getElementById("div-csv-preview").innerHTML = '<div style="color:var(--color-error);">CSV must have columns: date, shareholder, company, amount (memo optional).</div>';
+    return;
+  }
+  const rows = lines.slice(1).map((l) => {
+    const cells = splitCsvRow(l);
+    return {
+      event_date: (cells[iDate] || "").trim(),
+      shareholder_match: (cells[iSh] || "").trim(),
+      company_match: (cells[iCo] || "").trim(),
+      amount: parseFloat((cells[iAmt] || "0").replace(/[$,]/g, "")) || 0,
+      memo: iMemo >= 0 ? (cells[iMemo] || "").trim() : null,
+    };
+  });
+  let resp;
+  try {
+    resp = await shFetch("/api/dividend-events/import", { method: "POST", body: JSON.stringify({ rows, commit: false }) });
+  } catch (e) {
+    document.getElementById("div-csv-preview").innerHTML = `<div style="color:var(--color-error);">Preview failed: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  parsedCsvRows = rows;
+  const tbl = resp.preview.map((p) => `
+    <tr style="${p.errors.length ? "background:var(--color-warning-bg, #fef3c7);" : ""}">
+      <td>${escapeHtml(p.event_date || "")}</td>
+      <td>${escapeHtml(p.shareholder_name || p.shareholder_match || "—")}</td>
+      <td>${escapeHtml(p.company_name || p.company_match || "—")}</td>
+      <td style="text-align:right;">${formatMoney(p.amount)}</td>
+      <td>${escapeHtml(p.memo || "")}</td>
+      <td style="font-size:var(--text-xs); color:var(--color-error);">${p.errors.join(", ")}</td>
+    </tr>
+  `).join("");
+  document.getElementById("div-csv-preview").innerHTML = `
+    <div style="font-size:var(--text-sm); margin-bottom:8px;">${resp.writable_count} of ${resp.preview.length} rows will be imported (highlighted rows are skipped).</div>
+    <table class="data-table" style="width:100%;">
+      <thead><tr><th>Date</th><th>Shareholder</th><th>Company</th><th style="text-align:right;">Amount</th><th>Memo</th><th>Issues</th></tr></thead>
+      <tbody>${tbl}</tbody>
+    </table>`;
+  document.getElementById("div-csv-commit").disabled = resp.writable_count === 0;
+}
+
+async function commitCsvImport() {
+  if (!parsedCsvRows) return;
+  try {
+    const resp = await shFetch("/api/dividend-events/import", { method: "POST", body: JSON.stringify({ rows: parsedCsvRows, commit: true }) });
+    alert(`Imported ${resp.written} row${resp.written === 1 ? "" : "s"}.`);
+    closeModal("div-csv-modal");
+    await loadShareholders();
+    await loadEvents();
+    await loadBalances();
+  } catch (e) {
+    alert("Import failed: " + e.message);
+  }
+}
+
+// --- Reconciliation ---
+async function populateReconCompanies() {
+  const sel = document.getElementById("recon-companies");
+  if (!sel) return;
+  const companies = await getCompanies();
+  const current = new Set(Array.from(sel.selectedOptions).map((o) => o.value));
+  sel.innerHTML = companies.map((c) => `<option value="${c.id}"${current.has(c.id) ? " selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+}
+
+async function loadReconciliation() {
+  const sel = document.getElementById("recon-companies");
+  const ids = Array.from(sel.selectedOptions).map((o) => o.value);
+  const macro = document.getElementById("recon-macro").value;
+  const out = document.getElementById("recon-result");
+  out.innerHTML = '<div class="loading-placeholder" style="padding:16px; text-align:center; color:var(--color-text-muted);">Running reports...</div>';
+  let resp;
+  try {
+    resp = await shFetch("/api/reconciliation/profit-dividend-cash", {
+      method: "POST",
+      body: JSON.stringify({ company_ids: ids.length ? ids : null, date_macro: macro }),
+    });
+  } catch (e) {
+    out.innerHTML = `<div style="color:var(--color-error);">Failed: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  if (!resp.rows.length) {
+    out.innerHTML = '<div style="padding:12px; color:var(--color-text-muted);">No rows — pick at least one connected company.</div>';
+    return;
+  }
+  const noteMap = {
+    dividends_exceed_net_income: "Dividends exceed net income",
+    dividends_exceed_operating_cash: "Dividends exceed operating cash",
+    financing_variance_nonzero: "Financing variance > $1",
+  };
+  const rows = resp.rows.map((r) => `
+    <tr>
+      <td>${escapeHtml(r.company_name)}</td>
+      <td style="text-align:right;">${formatMoney(r.net_income)}</td>
+      <td style="text-align:right;">${formatMoney(r.dividends_paid)}</td>
+      <td style="text-align:right;">${formatMoney(r.distributable_remainder)}</td>
+      <td style="text-align:right;">${formatMoney(r.operating_cash)}</td>
+      <td style="text-align:right;">${formatMoney(r.financing_cash)}</td>
+      <td style="text-align:right;">${formatMoney(r.net_cash_change)}</td>
+      <td style="text-align:right;">${formatMoney(r.financing_variance)}</td>
+      <td>${r.variance_notes.map((n) => `<span class="recon-variance-tag">${escapeHtml(noteMap[n] || n)}</span>`).join("")}</td>
+    </tr>
+  `).join("");
+  const t = resp.totals;
+  out.innerHTML = `
+    <table class="data-table" style="width:100%;">
+      <thead><tr>
+        <th>Company</th><th style="text-align:right;">Net Income</th>
+        <th style="text-align:right;">Dividends Issued</th>
+        <th style="text-align:right;">Distributable</th>
+        <th style="text-align:right;">Operating Cash</th>
+        <th style="text-align:right;">Financing Cash</th>
+        <th style="text-align:right;">Net Cash Change</th>
+        <th style="text-align:right;">Financing Variance</th>
+        <th>Notes</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <th>Total</th>
+        <th style="text-align:right;">${formatMoney(t.net_income)}</th>
+        <th style="text-align:right;">${formatMoney(t.dividends_paid)}</th>
+        <th style="text-align:right;">${formatMoney(t.distributable_remainder)}</th>
+        <th style="text-align:right;">${formatMoney(t.operating_cash)}</th>
+        <th style="text-align:right;">${formatMoney(t.financing_cash)}</th>
+        <th style="text-align:right;">${formatMoney(t.net_cash_change)}</th>
+        <th style="text-align:right;">${formatMoney(t.financing_variance)}</th>
+        <th></th>
+      </tr></tfoot>
+    </table>`;
+  renderReconciliationCharts(resp);
+}
+
+function renderReconciliationCharts(resp) {
+  const labels = resp.rows.map((r) => r.company_name);
+  const earn = document.getElementById("recon-chart-earnings");
+  const cash = document.getElementById("recon-chart-cash");
+  if (chartInstances.reconEarnings) chartInstances.reconEarnings.destroy();
+  if (chartInstances.reconCash) chartInstances.reconCash.destroy();
+  if (earn) {
+    chartInstances.reconEarnings = new Chart(earn, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "Net Income",    data: resp.rows.map((r) => r.net_income),    backgroundColor: "#22c55e" },
+          { label: "Dividends",     data: resp.rows.map((r) => r.dividends_paid),backgroundColor: "#ef4444" },
+          { label: "Distributable", data: resp.rows.map((r) => r.distributable_remainder), backgroundColor: "#6366f1" },
+        ],
+      },
+      options: { responsive: true, plugins: { title: { display: true, text: "Earnings vs Distributions" } } },
+    });
+  }
+  if (cash) {
+    chartInstances.reconCash = new Chart(cash, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "Operating", data: resp.rows.map((r) => r.operating_cash), backgroundColor: "#0ea5e9" },
+          { label: "Investing", data: resp.rows.map((r) => r.investing_cash), backgroundColor: "#f59e0b" },
+          { label: "Financing", data: resp.rows.map((r) => r.financing_cash), backgroundColor: "#a855f7" },
+        ],
+      },
+      options: { responsive: true, plugins: { title: { display: true, text: "Cash Flow Breakdown" } } },
+    });
+  }
+}
+
+// --- small helpers (defensive; reuse existing app.js helpers if present) ---
+async function getCompanies(includeUnconnected = false) {
+  const cacheKey = includeUnconnected ? "_all" : "_connected";
+  if (shCompaniesCache && shCompaniesCache._key === cacheKey) return shCompaniesCache;
+  try {
+    const res = await fetch(API + "/api/companies", { headers: { Authorization: "Bearer " + authToken } });
+    const list = res.ok ? await res.json() : [];
+    const all = Array.isArray(list) ? list : [];
+    const filtered = includeUnconnected
+      ? all.filter((c) => c.status !== "deleted")
+      : all.filter((c) => c.status === "connected" || c.status === "synced");
+    filtered._key = cacheKey;
+    shCompaniesCache = filtered;
+  } catch { shCompaniesCache = []; shCompaniesCache._key = cacheKey; }
+  return shCompaniesCache;
+}
+
+async function getAccountsForCompany(companyId) {
+  if (!companyId) return [];
+  if (shAccountsByCompany[companyId]) return shAccountsByCompany[companyId];
+  try {
+    const res = await fetch(API + `/api/companies/${encodeURIComponent(companyId)}/accounts`, { headers: { Authorization: "Bearer " + authToken } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = (Array.isArray(data) ? data : data.accounts || []).map((a) => ({
+      id: a.qbo_account_id || a.id,
+      name: a.name || a.Name || a.fully_qualified_name,
+      type: a.account_type || a.AccountType,
+      sub_type: a.account_sub_type || a.AccountSubType,
+    }));
+    shAccountsByCompany[companyId] = list;
+    return list;
+  } catch { return []; }
+}
+
+function formatMoney(n) {
+  const v = Number(n || 0);
+  return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function splitCsvRow(line) {
+  const out = []; let cur = ""; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') inQ = false;
+      else cur += ch;
+    } else {
+      if (ch === ',') { out.push(cur); cur = ""; }
+      else if (ch === '"') inQ = true;
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// openModal / closeModal exist in app.js; fallback if not
+if (typeof openModal !== "function") {
+  window.openModal = function (id) { const m = document.getElementById(id); if (m) m.classList.add("active"); };
+  window.closeModal = function (id) { const m = document.getElementById(id); if (m) m.classList.remove("active"); };
+}
+
+// =====================================================================
+//  DIVIDENDS DASHBOARD (page-level tab)
+// =====================================================================
+
+function selectShView(view) {
+  try { localStorage.setItem("sh_view", view); } catch {}
+  document.querySelectorAll(".sh-page-tab").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.getElementById("sh-view-dashboard").style.display    = view === "dashboard"    ? "block" : "none";
+  document.getElementById("sh-view-shareholders").style.display = view === "shareholders" ? "block" : "none";
+  if (view === "dashboard") initDividendsDashboard();
+}
+
+let ddInitialized = false;
+async function initDividendsDashboard() {
+  if (!ddInitialized) {
+    // Populate company multi-select with EVERY company (connected or not)
+    // so the dashboard can consolidate across the full corporate structure
+    // even before every entity has QBO OAuth set up.
+    const companies = await getCompanies(true);
+    const sel = document.getElementById("dd-companies");
+    if (sel) sel.innerHTML = companies.map((c) => {
+      const connected = (c.status === "connected" || c.status === "synced");
+      const suffix = connected ? "" : "  (not connected)";
+      return `<option value="${c.id}">${escapeHtml(c.name)}${suffix}</option>`;
+    }).join("");
+    // Restore saved filters (v2 — skips any pre-April-23 saved filter that
+    // may have trapped a single-company selection).
+    try {
+      const saved = JSON.parse(localStorage.getItem("dd_filters") || "{}");
+      if (saved.v === 2) {
+        if (saved.macro) document.getElementById("dd-macro").value = saved.macro;
+        if (saved.trendMonths) document.getElementById("dd-trend-months").value = saved.trendMonths;
+        if (typeof saved.compare === "boolean") document.getElementById("dd-compare").checked = saved.compare;
+        if (Array.isArray(saved.companyIds) && sel) {
+          const set = new Set(saved.companyIds);
+          Array.from(sel.options).forEach((o) => { o.selected = set.has(o.value); });
+        }
+      } else {
+        // Clear out older cache so stale selections don't persist
+        localStorage.removeItem("dd_filters");
+      }
+    } catch {}
+    ddInitialized = true;
+  }
+  await loadDividendsDashboard();
+}
+
+async function loadDividendsDashboard() {
+  const macro = document.getElementById("dd-macro").value;
+  const trendMonths = parseInt(document.getElementById("dd-trend-months").value || "12", 10);
+  const compare = document.getElementById("dd-compare").checked;
+  const sel = document.getElementById("dd-companies");
+  const companyIds = sel ? Array.from(sel.selectedOptions).map((o) => o.value) : [];
+  try { localStorage.setItem("dd_filters", JSON.stringify({ v: 2, macro, trendMonths, compare, companyIds })); } catch {}
+
+  let resp;
+  try {
+    resp = await shFetch("/api/dashboard/dividends", {
+      method: "POST",
+      body: JSON.stringify({
+        date_macro: macro,
+        company_ids: companyIds.length ? companyIds : null,
+        trend_months: trendMonths,
+        compare_prior_period: compare,
+      }),
+    });
+  } catch (e) {
+    document.getElementById("dd-kpis").innerHTML = `<div class="dd-kpi alert"><div class="dd-kpi-label">Error</div><div class="dd-kpi-value" style="font-size:14px;">${escapeHtml(e.message)}</div></div>`;
+    return;
+  }
+  ddRenderKpis(resp);
+  ddRenderSignals(resp);
+  ddRenderFlags(resp);
+  ddRenderCompanyTable(resp);
+  ddRenderCharts(resp);
+  ddRenderConcentration(resp);
+  ddRenderHeatmap(resp);
+}
+
+function ddRenderKpis(resp) {
+  const el = document.getElementById("dd-kpis");
+  const k = resp.kpis;
+  function delta(curr, prior, invert) {
+    if (prior == null || prior === 0) return "";
+    const d = curr - prior;
+    const pct = Math.abs(d / prior) * 100;
+    const up = d >= 0;
+    const cls = (invert ? !up : up) ? "up" : "down";
+    const arrow = up ? "▲" : "▼";
+    return `<div class="dd-kpi-delta ${cls}">${arrow} ${formatMoney(Math.abs(d))} (${pct.toFixed(0)}% vs prior)</div>`;
+  }
+  const payoutAlert = k.payout_ratio != null && k.payout_ratio > 1.0 ? "alert" : "";
+  const distributableGood = k.distributable_remainder >= 0 ? "good" : "alert";
+  el.innerHTML = `
+    <div class="dd-kpi">
+      <div class="dd-kpi-label">Cash on hand</div>
+      <div class="dd-kpi-value">${formatMoney(k.cash_on_hand.current)}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Snapshot from cached QBO balances</div>
+    </div>
+    <div class="dd-kpi">
+      <div class="dd-kpi-label">Net income · ${escapeHtml(resp.period.label)}</div>
+      <div class="dd-kpi-value">${formatMoney(k.net_income.current)}</div>
+      ${delta(k.net_income.current, k.net_income.prior, false)}
+    </div>
+    <div class="dd-kpi">
+      <div class="dd-kpi-label">Dividends paid</div>
+      <div class="dd-kpi-value">${formatMoney(k.dividends_paid.current)}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Pro-rata ${formatMoney((k.dividends_pro_rata && k.dividends_pro_rata.current) || 0)} · MB ${formatMoney((k.managing_bonus_paid && k.managing_bonus_paid.current) || 0)}</div>
+      ${delta(k.dividends_paid.current, k.dividends_paid.prior, false)}
+    </div>
+    <div class="dd-kpi ${payoutAlert}">
+      <div class="dd-kpi-label">Payout ratio</div>
+      <div class="dd-kpi-value">${k.payout_ratio == null ? "—" : (k.payout_ratio * 100).toFixed(1) + "%"}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Dividends ÷ Net Income${k.payout_ratio != null && k.payout_ratio > 1 ? " · exceeding 100%" : ""}</div>
+    </div>
+  `;
+  const sig = document.getElementById("dd-signals");
+  sig.innerHTML = `
+    <div class="dd-kpi ${distributableGood}">
+      <div class="dd-kpi-label">Distributable remainder</div>
+      <div class="dd-kpi-value">${formatMoney(k.distributable_remainder)}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Net income − dividends (book view)</div>
+    </div>
+    <div class="dd-kpi ${k.cash_runway_months != null && k.cash_runway_months < 3 ? "alert" : ""}">
+      <div class="dd-kpi-label">Cash runway</div>
+      <div class="dd-kpi-value">${k.cash_runway_months == null ? "—" : k.cash_runway_months.toFixed(1) + " months"}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Cash ÷ avg monthly dividend</div>
+    </div>
+    <div class="dd-kpi">
+      <div class="dd-kpi-label">Cash conversion</div>
+      <div class="dd-kpi-value">${k.cash_conversion == null ? "—" : k.cash_conversion.toFixed(2)}</div>
+      <div class="dd-kpi-delta" style="color:var(--color-text-muted);">Operating cash ÷ net income</div>
+    </div>
+  `;
+}
+
+function ddRenderFlags(resp) {
+  const wrap = document.getElementById("dd-flags-wrap");
+  const out = document.getElementById("dd-flags");
+  const count = document.getElementById("dd-flag-count");
+  if (!resp.flags || !resp.flags.length) {
+    wrap.style.display = "none"; return;
+  }
+  wrap.style.display = "block";
+  count.textContent = `${resp.flags.length} signal${resp.flags.length === 1 ? "" : "s"}`;
+  out.innerHTML = resp.flags.map((f) => `
+    <div class="dd-flag-row">
+      <span class="dd-flag-badge dd-flag-${f.kind}">${escapeHtml(f.kind.replace(/_/g, " "))}</span>
+      <span>${escapeHtml(f.message)}</span>
+    </div>
+  `).join("");
+}
+
+function ddRenderCompanyTable(resp) {
+  const el = document.getElementById("dd-company-table");
+  if (!resp.by_company.length) {
+    el.innerHTML = `<div style="padding:16px; color:var(--color-text-muted);">No connected companies in the filter.</div>`;
+    return;
+  }
+  const rows = resp.by_company.map((r) => `
+    <tr${r.connected === false ? ' style="color:var(--color-text-muted); font-style:italic;"' : ""}>
+      <td>${escapeHtml(r.company_name)}${r.connected === false ? ' <span class="pill" style="font-size:10px;">not connected</span>' : ""}</td>
+      <td style="text-align:right;">${formatMoney(r.cash_on_hand)}</td>
+      <td style="text-align:right;">${formatMoney(r.net_income)}</td>
+      <td style="text-align:right;">${formatMoney(r.dividends_paid)}</td>
+      <td style="text-align:right;">${r.payout_ratio == null ? "—" : (r.payout_ratio * 100).toFixed(1) + "%"}</td>
+      <td style="text-align:right;">${formatMoney(r.distributable_remainder)}</td>
+      <td style="text-align:right;">${formatMoney(r.operating_cash)}</td>
+      <td style="text-align:right;">${formatMoney(r.financing_variance)}</td>
+      <td>${r.flags.map((f) => `<span class="dd-flag-badge dd-flag-${f}">${escapeHtml(f.replace(/_/g, " "))}</span>`).join(" ")}</td>
+    </tr>
+  `).join("");
+  const t = resp.totals;
+  el.innerHTML = `
+    <table class="data-table" style="width:100%;">
+      <thead><tr>
+        <th>Company</th>
+        <th style="text-align:right;">Cash</th>
+        <th style="text-align:right;">Net Income</th>
+        <th style="text-align:right;">Dividends</th>
+        <th style="text-align:right;">Payout</th>
+        <th style="text-align:right;">Distributable</th>
+        <th style="text-align:right;">Operating Cash</th>
+        <th style="text-align:right;">Financing Var.</th>
+        <th>Flags</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <th>Total</th>
+        <th style="text-align:right;">${formatMoney(t.cash_on_hand)}</th>
+        <th style="text-align:right;">${formatMoney(t.net_income)}</th>
+        <th style="text-align:right;">${formatMoney(t.dividends_paid)}</th>
+        <th></th>
+        <th style="text-align:right;">${formatMoney(t.net_income - t.dividends_paid)}</th>
+        <th style="text-align:right;">${formatMoney(t.operating_cash)}</th>
+        <th></th><th></th>
+      </tr></tfoot>
+    </table>`;
+}
+
+function ddRenderCharts(resp) {
+  const labels = resp.by_company.map((r) => r.company_name);
+  // Chart 1: stacked bar of Dividends vs Retained per company; NI as outline
+  const earn = document.getElementById("dd-chart-earnings");
+  if (chartInstances.ddEarnings) chartInstances.ddEarnings.destroy();
+  if (earn && labels.length) {
+    chartInstances.ddEarnings = new Chart(earn, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "Dividends", data: resp.by_company.map((r) => r.dividends_paid), backgroundColor: "#ef4444", stack: "ni" },
+          { label: "Retained",  data: resp.by_company.map((r) => r.distributable_remainder), backgroundColor: "#22c55e", stack: "ni" },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: { x: { stacked: true }, y: { stacked: true } },
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+  }
+  // Chart 2: Cash on hand per company
+  const cash = document.getElementById("dd-chart-cash");
+  if (chartInstances.ddCash) chartInstances.ddCash.destroy();
+  if (cash && labels.length) {
+    chartInstances.ddCash = new Chart(cash, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{ label: "Cash on hand", data: resp.by_company.map((r) => r.cash_on_hand), backgroundColor: "#0ea5e9" }],
+      },
+      options: { responsive: true, indexAxis: "y", plugins: { legend: { display: false } } },
+    });
+  }
+  // Chart 3: trend combo (bar dividends, line NI, line payout ratio on 2nd axis)
+  const trend = document.getElementById("dd-chart-trend");
+  if (chartInstances.ddTrend) chartInstances.ddTrend.destroy();
+  if (trend && resp.trend_monthly && resp.trend_monthly.length) {
+    const tr = resp.trend_monthly;
+    chartInstances.ddTrend = new Chart(trend, {
+      data: {
+        labels: tr.map((t) => t.label),
+        datasets: [
+          { type: "bar",  label: "Dividends",  data: tr.map((t) => t.dividends_paid), backgroundColor: "#ef4444", yAxisID: "y" },
+          { type: "line", label: "Net income", data: tr.map((t) => t.net_income),     borderColor: "#22c55e", backgroundColor: "#22c55e", tension: 0.3, yAxisID: "y" },
+          { type: "line", label: "Payout ratio", data: tr.map((t) => t.payout_ratio == null ? null : t.payout_ratio * 100), borderColor: "#6366f1", borderDash: [4, 4], tension: 0.3, yAxisID: "y1" },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y:  { position: "left",  title: { display: true, text: "$" } },
+          y1: { position: "right", title: { display: true, text: "Payout %" }, grid: { drawOnChartArea: false } },
+        },
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+  }
+}
+
+function ddRenderConcentration(resp) {
+  const list = (resp.by_shareholder || []).slice().sort((a, b) => b.total_paid - a.total_paid);
+  const top = list.slice(0, 8);
+  const rest = list.slice(8);
+  const restSum = rest.reduce((s, x) => s + x.total_paid, 0);
+  const labels = top.map((x) => x.shareholder_name).concat(rest.length ? ["Other"] : []);
+  const data = top.map((x) => x.total_paid).concat(rest.length ? [restSum] : []);
+  const colors = ["#6366f1", "#22c55e", "#ef4444", "#f59e0b", "#0ea5e9", "#a855f7", "#14b8a6", "#ec4899", "#64748b"];
+  const ctx = document.getElementById("dd-chart-concentration");
+  if (chartInstances.ddConc) chartInstances.ddConc.destroy();
+  if (ctx && data.length) {
+    chartInstances.ddConc = new Chart(ctx, {
+      type: "doughnut",
+      data: { labels, datasets: [{ data, backgroundColor: colors.slice(0, data.length) }] },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+    });
+  }
+  const tbl = document.getElementById("dd-concentration-table");
+  tbl.innerHTML = list.length ? `
+    <table class="data-table" style="width:100%; font-size:var(--text-xs);">
+      <thead><tr>
+        <th>Shareholder</th>
+        <th style="text-align:right;">Pro-rata</th>
+        <th style="text-align:right;">MB</th>
+        <th style="text-align:right;">Total</th>
+        <th style="text-align:right;">Expected</th>
+        <th style="text-align:right;">Variance</th>
+        <th style="text-align:right;">Share</th>
+      </tr></thead>
+      <tbody>${list.map((s) => {
+        const v = s.pro_rata_variance;
+        const vClass = v == null ? "" : (v > 0 ? "up" : (v < 0 ? "down" : ""));
+        return `<tr>
+          <td>${escapeHtml(s.shareholder_name)}</td>
+          <td style="text-align:right;">${formatMoney(s.pro_rata_paid || 0)}</td>
+          <td style="text-align:right;">${formatMoney(s.managing_bonus_paid || 0)}</td>
+          <td style="text-align:right; font-weight:600;">${formatMoney(s.total_paid)}</td>
+          <td style="text-align:right; color:var(--color-text-muted);">${s.expected_pro_rata == null ? "—" : formatMoney(s.expected_pro_rata)}</td>
+          <td style="text-align:right;" class="dd-kpi-delta ${vClass}">${v == null ? "—" : (v > 0 ? "+" : "") + formatMoney(v)}</td>
+          <td style="text-align:right;">${(s.share_of_total * 100).toFixed(1)}%</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>
+  ` : `<div style="padding:12px; color:var(--color-text-muted); font-size:var(--text-sm);">No distributions in this period.</div>`;
+}
+
+function ddRenderHeatmap(resp) {
+  const el = document.getElementById("dd-heatmap");
+  const companies = resp.by_company.map((c) => ({ id: c.company_id, name: c.company_name }));
+  const shareholders = (resp.by_shareholder || []).slice().sort((a, b) => b.total_paid - a.total_paid);
+  if (!shareholders.length || !companies.length) {
+    el.innerHTML = `<div style="padding:12px; color:var(--color-text-muted); font-size:var(--text-sm);">No data in this period.</div>`;
+    return;
+  }
+  // Compute max for scaling color intensity
+  let max = 0;
+  for (const s of shareholders) for (const c of s.by_company) if (c.amount > max) max = c.amount;
+
+  const amountFor = (s, cid) => {
+    const row = (s.by_company || []).find((x) => x.company_id === cid);
+    return row ? row.amount : 0;
+  };
+  function bg(val) {
+    if (!val) return "transparent";
+    const intensity = Math.min(1, val / max);
+    const alpha = 0.1 + intensity * 0.6;
+    return `rgba(99, 102, 241, ${alpha.toFixed(2)})`;
+  }
+  const head = `<tr>
+    <th class="dd-heatmap-head" style="padding:6px 10px;">Shareholder</th>
+    ${companies.map((c) => `<th class="dd-heatmap-head" style="padding:6px 10px; text-align:right;">${escapeHtml(c.name)}</th>`).join("")}
+    <th class="dd-heatmap-head" style="padding:6px 10px; text-align:right;">Total</th>
+  </tr>`;
+  const rows = shareholders.map((s) => `
+    <tr>
+      <td style="padding:6px 10px; font-weight:600;">${escapeHtml(s.shareholder_name)}</td>
+      ${companies.map((c) => {
+        const v = amountFor(s, c.id);
+        return `<td class="dd-heatmap-cell" style="background:${bg(v)};">${v ? formatMoney(v) : ""}</td>`;
+      }).join("")}
+      <td class="dd-heatmap-cell" style="font-weight:600;">${formatMoney(s.total_paid)}</td>
+    </tr>
+  `).join("");
+  el.innerHTML = `<table style="width:100%; border-collapse:collapse;">${head}${rows}</table>`;
+}
+
+function formatPercent(n) {
+  if (n == null) return "—";
+  return (Number(n) * 100).toFixed(1) + "%";
+}
+
+// Restore saved view selection on page entry
+(function() {
+  const saved = (() => { try { return localStorage.getItem("sh_view"); } catch { return null; } })();
+  const origNavigate = window.navigateTo;
+  // Patch the existing navigateTo to trigger dashboard init when landing on shareholders
+  if (typeof origNavigate === "function" && !origNavigate._patchedForDashboard) {
+    const patched = function (page) {
+      origNavigate(page);
+      if (page === "shareholders") {
+        const view = (saved === "shareholders") ? "shareholders" : "dashboard";
+        selectShView(view);
+      }
+    };
+    patched._patchedForDashboard = true;
+    window.navigateTo = patched;
+  }
+})();
