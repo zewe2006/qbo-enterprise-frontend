@@ -134,6 +134,16 @@
       </ul>
     </div>
 
+    <div class="sidebar-section" id="nav-shareholders-section" style="display:none;">
+      <div class="sidebar-label">Shareholders</div>
+      <ul class="sidebar-nav">
+        <li><a href="#shareholders" data-page="shareholders">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+          <span>Dividends</span>
+        </a></li>
+      </ul>
+    </div>
+
     <div class="sidebar-section">
       <div class="sidebar-label">Import</div>
       <ul class="sidebar-nav">
@@ -1006,7 +1016,279 @@
       </div>
     </section>
 
+    <!-- ======== SHAREHOLDER DIVIDENDS PAGE ======== -->
+    <section id="page-shareholders" class="page-content">
+      <div class="card mb-6">
+        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <span class="card-title">Shareholder Dividends</span>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="openCsvImport()">Import CSV</button>
+            <button class="btn btn-primary btn-sm" onclick="openShareholderEditor(null)">+ Shareholder</button>
+          </div>
+        </div>
+        <p style="font-size:var(--text-sm); color:var(--color-text-muted); margin-bottom:12px;">
+          Track shareholder distributions across every connected QBO company. Record payments here and this app will post a balanced journal entry to the source company's book; link `A/C Drawing` and `Dividend Payable` accounts to roll amounts up per person.
+        </p>
+        <div class="sh-page-tabs" style="display:flex; gap:4px; border-bottom:1px solid var(--color-border); margin:0 -16px -16px;">
+          <button class="sh-page-tab active" data-view="dashboard" onclick="selectShView('dashboard')">Dashboard</button>
+          <button class="sh-page-tab" data-view="shareholders" onclick="selectShView('shareholders')">Shareholders</button>
+        </div>
+      </div>
+
+      <!-- === DASHBOARD VIEW === -->
+      <div id="sh-view-dashboard">
+        <div class="card mb-4" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+          <div class="form-group" style="min-width:160px;">
+            <label style="font-size:var(--text-xs); display:block; margin-bottom:4px;">Period</label>
+            <select id="dd-macro" style="width:100%; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+              <option value="this-year-to-date">Year to date</option>
+              <option value="this-quarter">This quarter</option>
+              <option value="this-month">This month</option>
+              <option value="last-year">Last fiscal year</option>
+              <option value="last-month">Last month</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1; min-width:220px;">
+            <label style="font-size:var(--text-xs); display:block; margin-bottom:4px;">Companies</label>
+            <select id="dd-companies" multiple style="width:100%; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md); min-height:70px;"></select>
+            <div style="font-size:11px; color:var(--color-text-muted); margin-top:2px;">Cmd/Ctrl-click to multi-select · empty = all connected</div>
+          </div>
+          <div class="form-group">
+            <label style="font-size:var(--text-xs); display:block; margin-bottom:4px;">Trend months</label>
+            <input type="number" id="dd-trend-months" value="12" min="1" max="24" style="width:80px; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+          </div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:var(--text-sm); padding-bottom:6px;">
+            <input type="checkbox" id="dd-compare" checked> Compare prior period
+          </label>
+          <button class="btn btn-primary btn-sm" onclick="loadDividendsDashboard()">Run</button>
+        </div>
+
+        <div id="dd-kpis" class="mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;"></div>
+        <div id="dd-signals" class="mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;"></div>
+        <div id="dd-flags-wrap" class="card mb-4" style="display:none;">
+          <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+            <span class="card-title">Signals</span>
+            <span id="dd-flag-count" class="pill"></span>
+          </div>
+          <div id="dd-flags"></div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">Per-company breakdown</span></div>
+          <div id="dd-company-table" style="overflow-x:auto;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+          <div class="card"><div class="card-header"><span class="card-title">Earnings vs distributions</span></div><canvas id="dd-chart-earnings" height="200"></canvas></div>
+          <div class="card"><div class="card-header"><span class="card-title">Cash on hand by company</span></div><canvas id="dd-chart-cash" height="200"></canvas></div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">Trend — Net Income vs Dividends</span></div>
+          <canvas id="dd-chart-trend" height="160"></canvas>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1.4fr; gap:16px;">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Shareholder concentration</span></div>
+            <canvas id="dd-chart-concentration" height="220"></canvas>
+            <div id="dd-concentration-table" style="margin-top:12px;"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Sourcing matrix (shareholders × companies)</span></div>
+            <div id="dd-heatmap" style="overflow-x:auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === SHAREHOLDERS VIEW === -->
+      <div id="sh-view-shareholders" style="display:none;">
+      <div class="sh-layout" style="display:grid; grid-template-columns:280px 1fr; gap:16px;">
+        <!-- Left: shareholder list -->
+        <div class="card" style="padding:0; overflow:hidden;">
+          <div style="padding:12px 14px; border-bottom:1px solid var(--color-border); display:flex; gap:8px; align-items:center;">
+            <input type="search" id="sh-search" placeholder="Search..." style="flex:1; padding:6px 10px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm);" oninput="renderShareholderList()">
+            <label style="font-size:var(--text-xs); display:flex; align-items:center; gap:4px; color:var(--color-text-muted);">
+              <input type="checkbox" id="sh-include-inactive" onchange="loadShareholders()"> Inactive
+            </label>
+          </div>
+          <ul id="sh-list" style="list-style:none; padding:0; margin:0; max-height:640px; overflow-y:auto;"></ul>
+        </div>
+
+        <!-- Right: shareholder drawer -->
+        <div class="card" id="sh-detail" style="min-height:400px;">
+          <div id="sh-detail-empty" style="display:flex; align-items:center; justify-content:center; min-height:400px; color:var(--color-text-muted); font-size:var(--text-sm);">
+            Select a shareholder from the list, or add one to get started.
+          </div>
+          <div id="sh-detail-body" style="display:none;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:14px 16px; border-bottom:1px solid var(--color-border);">
+              <div>
+                <h3 id="sh-detail-name" style="margin:0; font-size:var(--text-lg); font-weight:700;"></h3>
+                <div id="sh-detail-meta" style="font-size:var(--text-xs); color:var(--color-text-muted); margin-top:2px;"></div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary btn-sm" onclick="openRecordPayment()">Record payment</button>
+                <button class="btn btn-ghost btn-sm" onclick="openShareholderEditor(currentShareholderId)">Edit</button>
+              </div>
+            </div>
+            <div class="sh-tabs" style="display:flex; gap:4px; padding:0 16px; border-bottom:1px solid var(--color-border);">
+              <button class="sh-tab active" data-sh-tab="balances" onclick="selectShTab('balances')">Balances</button>
+              <button class="sh-tab" data-sh-tab="events" onclick="selectShTab('events')">Events</button>
+              <button class="sh-tab" data-sh-tab="recon" onclick="selectShTab('recon')">Reconciliation</button>
+              <button class="sh-tab" data-sh-tab="links" onclick="selectShTab('links')">Account links</button>
+            </div>
+
+            <div id="sh-tab-balances" class="sh-tab-body" style="padding:14px 16px;">
+              <div id="sh-balances-content">
+                <div class="loading-placeholder" style="padding:24px; text-align:center; color:var(--color-text-muted);">Loading balances...</div>
+              </div>
+            </div>
+
+            <div id="sh-tab-events" class="sh-tab-body" style="padding:14px 16px; display:none;">
+              <div id="sh-events-content"></div>
+            </div>
+
+            <div id="sh-tab-recon" class="sh-tab-body" style="padding:14px 16px; display:none;">
+              <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:end; margin-bottom:12px;">
+                <div class="form-group" style="flex:1; min-width:200px;">
+                  <label style="font-size:var(--text-xs); display:block; margin-bottom:4px;">Companies</label>
+                  <select id="recon-companies" multiple style="width:100%; padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm); min-height:80px;"></select>
+                </div>
+                <div class="form-group">
+                  <label style="font-size:var(--text-xs); display:block; margin-bottom:4px;">Period</label>
+                  <select id="recon-macro" style="padding:6px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm);">
+                    <option value="this-year-to-date">This YTD</option>
+                    <option value="this-quarter">This quarter</option>
+                    <option value="this-month">This month</option>
+                    <option value="last-year">Last year</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="loadReconciliation()">Run</button>
+              </div>
+              <div id="recon-result"></div>
+              <div style="margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                <div><canvas id="recon-chart-earnings" height="160"></canvas></div>
+                <div><canvas id="recon-chart-cash" height="160"></canvas></div>
+              </div>
+            </div>
+
+            <div id="sh-tab-links" class="sh-tab-body" style="padding:14px 16px; display:none;">
+              <div id="sh-links-content"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div><!-- /sh-view-shareholders -->
+    </section>
+
   </main>
+</div>
+
+<!-- ======== MODAL: Record Dividend Payment ======== -->
+<div id="div-payment-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:560px;">
+    <div class="modal-header">
+      <h3>Record dividend payment</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('div-payment-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4); display:flex; flex-direction:column; gap:12px;">
+      <div class="form-group">
+        <label>Shareholder</label>
+        <input type="text" id="dp-shareholder-name" disabled style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-bg-subtle);">
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>Source company</label>
+          <select id="dp-company" onchange="dpOnCompanyChange()" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);"></select>
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="dp-date" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>Amount ($)</label>
+          <input type="number" id="dp-amount" step="0.01" min="0" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+        </div>
+        <div class="form-group">
+          <label>Drawing account</label>
+          <input list="dp-drawing-accounts" id="dp-drawing" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+          <datalist id="dp-drawing-accounts"></datalist>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cash account (credit)</label>
+        <input list="dp-cash-accounts" id="dp-cash" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);" placeholder="Select a bank account">
+        <datalist id="dp-cash-accounts"></datalist>
+      </div>
+      <div class="form-group">
+        <label>Memo</label>
+        <input type="text" id="dp-memo" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:var(--text-sm);">
+        <input type="checkbox" id="dp-post-to-qbo" checked>
+        Also post a journal entry to QBO (recommended)
+      </label>
+      <div id="dp-error" style="display:none; color:var(--color-error); font-size:var(--text-sm);"></div>
+    </div>
+    <div class="modal-footer" style="padding:var(--space-4); display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--color-border);">
+      <button class="btn btn-ghost" onclick="closeModal('div-payment-modal')">Cancel</button>
+      <button class="btn btn-primary" id="dp-submit" onclick="submitRecordPayment()">Save payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== MODAL: CSV Import ======== -->
+<div id="div-csv-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:720px;">
+    <div class="modal-header">
+      <h3>Import historical dividends</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('div-csv-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4);">
+      <p style="font-size:var(--text-sm); color:var(--color-text-muted);">CSV columns: <code>date, shareholder, company, amount, memo</code>. Rows are pre-matched and previewed before any writes. Imported rows record the payment in this app but do NOT post a JE to QBO — assume your existing spreadsheet is already reflected in QBO.</p>
+      <input type="file" id="div-csv-file" accept=".csv" style="margin:12px 0;">
+      <div id="div-csv-preview"></div>
+    </div>
+    <div class="modal-footer" style="padding:var(--space-4); display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--color-border);">
+      <button class="btn btn-ghost" onclick="closeModal('div-csv-modal')">Cancel</button>
+      <button class="btn btn-primary" id="div-csv-commit" onclick="commitCsvImport()" disabled>Commit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== MODAL: Shareholder Editor ======== -->
+<div id="sh-editor-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 id="sh-editor-title">Shareholder</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('sh-editor-modal')" style="font-size:var(--text-lg);">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:var(--space-4); display:flex; flex-direction:column; gap:12px;">
+      <div class="form-group">
+        <label>Display name</label>
+        <input type="text" id="she-display-name" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+      </div>
+      <div class="form-group">
+        <label>Short name <span style="color:var(--color-text-muted); font-size:var(--text-xs);">(used for fuzzy account matching)</span></label>
+        <input type="text" id="she-short-name" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="she-notes" rows="3" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius-md);"></textarea>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:var(--text-sm);">
+        <input type="checkbox" id="she-active" checked>
+        Active
+      </label>
+      <div id="she-error" style="display:none; color:var(--color-error); font-size:var(--text-sm);"></div>
+    </div>
+    <div class="modal-footer" style="padding:var(--space-4); display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--color-border);">
+      <button class="btn btn-ghost" onclick="closeModal('sh-editor-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveShareholder()">Save</button>
+    </div>
+  </div>
 </div>
 
 <!-- ======== MODAL: Knowledge Base Entry ======== -->
