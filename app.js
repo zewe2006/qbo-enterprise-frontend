@@ -4294,13 +4294,19 @@ function renderReconciliationCharts(resp) {
 }
 
 // --- small helpers (defensive; reuse existing app.js helpers if present) ---
-async function getCompanies() {
-  if (shCompaniesCache) return shCompaniesCache;
+async function getCompanies(includeUnconnected = false) {
+  const cacheKey = includeUnconnected ? "_all" : "_connected";
+  if (shCompaniesCache && shCompaniesCache._key === cacheKey) return shCompaniesCache;
   try {
     const res = await fetch(API + "/api/companies", { headers: { Authorization: "Bearer " + authToken } });
     const list = res.ok ? await res.json() : [];
-    shCompaniesCache = (Array.isArray(list) ? list : []).filter((c) => (c.status === "connected" || c.status === "synced"));
-  } catch { shCompaniesCache = []; }
+    const all = Array.isArray(list) ? list : [];
+    const filtered = includeUnconnected
+      ? all.filter((c) => c.status !== "deleted")
+      : all.filter((c) => c.status === "connected" || c.status === "synced");
+    filtered._key = cacheKey;
+    shCompaniesCache = filtered;
+  } catch { shCompaniesCache = []; shCompaniesCache._key = cacheKey; }
   return shCompaniesCache;
 }
 
@@ -4373,19 +4379,31 @@ function selectShView(view) {
 let ddInitialized = false;
 async function initDividendsDashboard() {
   if (!ddInitialized) {
-    // Populate company multi-select
-    const companies = await getCompanies();
+    // Populate company multi-select with EVERY company (connected or not)
+    // so the dashboard can consolidate across the full corporate structure
+    // even before every entity has QBO OAuth set up.
+    const companies = await getCompanies(true);
     const sel = document.getElementById("dd-companies");
-    if (sel) sel.innerHTML = companies.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
-    // Restore saved filters
+    if (sel) sel.innerHTML = companies.map((c) => {
+      const connected = (c.status === "connected" || c.status === "synced");
+      const suffix = connected ? "" : "  (not connected)";
+      return `<option value="${c.id}">${escapeHtml(c.name)}${suffix}</option>`;
+    }).join("");
+    // Restore saved filters (v2 — skips any pre-April-23 saved filter that
+    // may have trapped a single-company selection).
     try {
       const saved = JSON.parse(localStorage.getItem("dd_filters") || "{}");
-      if (saved.macro) document.getElementById("dd-macro").value = saved.macro;
-      if (saved.trendMonths) document.getElementById("dd-trend-months").value = saved.trendMonths;
-      if (typeof saved.compare === "boolean") document.getElementById("dd-compare").checked = saved.compare;
-      if (Array.isArray(saved.companyIds) && sel) {
-        const set = new Set(saved.companyIds);
-        Array.from(sel.options).forEach((o) => { o.selected = set.has(o.value); });
+      if (saved.v === 2) {
+        if (saved.macro) document.getElementById("dd-macro").value = saved.macro;
+        if (saved.trendMonths) document.getElementById("dd-trend-months").value = saved.trendMonths;
+        if (typeof saved.compare === "boolean") document.getElementById("dd-compare").checked = saved.compare;
+        if (Array.isArray(saved.companyIds) && sel) {
+          const set = new Set(saved.companyIds);
+          Array.from(sel.options).forEach((o) => { o.selected = set.has(o.value); });
+        }
+      } else {
+        // Clear out older cache so stale selections don't persist
+        localStorage.removeItem("dd_filters");
       }
     } catch {}
     ddInitialized = true;
@@ -4399,7 +4417,7 @@ async function loadDividendsDashboard() {
   const compare = document.getElementById("dd-compare").checked;
   const sel = document.getElementById("dd-companies");
   const companyIds = sel ? Array.from(sel.selectedOptions).map((o) => o.value) : [];
-  try { localStorage.setItem("dd_filters", JSON.stringify({ macro, trendMonths, compare, companyIds })); } catch {}
+  try { localStorage.setItem("dd_filters", JSON.stringify({ v: 2, macro, trendMonths, compare, companyIds })); } catch {}
 
   let resp;
   try {
@@ -4506,8 +4524,8 @@ function ddRenderCompanyTable(resp) {
     return;
   }
   const rows = resp.by_company.map((r) => `
-    <tr>
-      <td>${escapeHtml(r.company_name)}</td>
+    <tr${r.connected === false ? ' style="color:var(--color-text-muted); font-style:italic;"' : ""}>
+      <td>${escapeHtml(r.company_name)}${r.connected === false ? ' <span class="pill" style="font-size:10px;">not connected</span>' : ""}</td>
       <td style="text-align:right;">${formatMoney(r.cash_on_hand)}</td>
       <td style="text-align:right;">${formatMoney(r.net_income)}</td>
       <td style="text-align:right;">${formatMoney(r.dividends_paid)}</td>
