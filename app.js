@@ -241,7 +241,14 @@ async function apiPost(path, body) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `API Error: ${res.status}`);
+    const detail = data.detail;
+    const msg = typeof detail === "string"
+      ? detail
+      : (detail && (Array.isArray(detail.errors) ? detail.errors.join("; ") : detail.message)) || `API Error: ${res.status}`;
+    const err = new Error(msg);
+    err.detail = detail;
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
@@ -1621,11 +1628,15 @@ async function loadICHistory() {
     if (!entries.length) { el.innerHTML = '<p class="text-muted" style="padding:var(--space-4);font-size:var(--text-sm);">No intercompany entries yet.</p>'; return; }
     let html = '<table class="data-table"><thead><tr><th style="width:30px;"></th><th>Date</th><th>Source</th><th>Destination</th><th>Type</th><th class="num">Amount</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
     for (const e of entries) {
-      const b = e.status === "posted" ? "badge-success" : e.status === "pending" ? "badge-warning" : e.status === "partial" ? "badge-warning" : "badge-neutral";
+      const b = e.status === "posted" ? "badge-success"
+        : e.status === "pending" ? "badge-warning"
+        : e.status === "partial" ? "badge-warning"
+        : e.status === "failed" ? "badge-error"
+        : "badge-neutral";
       const copyBtn = `<button class="btn btn-sm btn-secondary" onclick="copyICEntry('${e.id}')" title="Copy to new entry">Copy</button>`;
       const editBtn = `<button class="btn btn-sm btn-secondary" onclick="editICEntry('${e.id}')" title="Edit entry">Edit</button>`;
       let actions = '';
-      if (e.status === "pending" || e.status === "partial") {
+      if (e.status === "pending" || e.status === "partial" || e.status === "failed") {
         actions = `<button class="btn btn-sm btn-primary" onclick="postICEntry('${e.id}')">Post</button> ${editBtn} ${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
       } else {
         actions = `${copyBtn} <button class="btn btn-sm btn-ghost" style="color:var(--color-error);" onclick="deleteICEntry('${e.id}')">&times;</button>`;
@@ -1696,12 +1707,16 @@ async function postICEntry(entryId) {
     const result = await apiPost(`/api/intercompany/${entryId}/post`, {});
     if (result.status === "posted") {
       showToast(`Journal entries posted to QBO (Source JE #${result.source_je_id || "-"}, Dest JE #${result.dest_je_id || "-"})`, "success");
-    } else if (result.status === "partial") {
-      showToast(`Partially posted. ${result.errors?.join("; ") || ""}`, "warning");
+    } else {
+      const detail = (result.errors || []).join("; ") || "see history";
+      showToast(`Post incomplete (${result.status}): ${detail}`, "warning");
     }
-    loadICHistory();
   } catch (e) {
-    showToast("Post failed: " + e.message, "error");
+    const errs = e?.detail?.errors;
+    const msg = Array.isArray(errs) && errs.length ? errs.join("; ") : e.message;
+    showToast("Post failed: " + msg, "error");
+  } finally {
+    loadICHistory();
     if (btn) { btn.disabled = false; btn.textContent = "Post"; }
   }
 }
