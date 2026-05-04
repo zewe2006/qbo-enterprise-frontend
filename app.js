@@ -432,7 +432,7 @@ function navigateTo(page) {
     users: "User Management",
     billing: "Billing & Subscription",
     "knowledge-base": "AI Knowledge Base",
-    "delivery-import": "UberEats / DoorDash Import",
+    "delivery-import": "UberEats / DoorDash / Grubhub Import",
   };
   // Block non-admin from users page
   if (page === "users" && currentUser && currentUser.role !== "admin") {
@@ -3099,12 +3099,19 @@ async function deleteKBEntry(id) {
 }
 
 /* ============================================
-   DELIVERY IMPORT (Uber Eats / DoorDash)
+   DELIVERY IMPORT (Uber Eats / DoorDash / Grubhub)
    ============================================ */
 
 let diParsedData = null;   // holds parsed response from /api/delivery-import/parse
 let diCsvContent = "";     // the raw CSV string for download
 let diEntries = [];        // array of journal entry rows for preview
+
+const DI_PLATFORMS = {
+  ubereats: { label: "Uber Eats", prefix: "UBER", filenameLabel: "UberEats" },
+  doordash: { label: "DoorDash", prefix: "DD",   filenameLabel: "DoorDash" },
+  grubhub:  { label: "Grubhub",  prefix: "GH",   filenameLabel: "Grubhub" },
+};
+function diPlatform(p) { return DI_PLATFORMS[p] || { label: p || "Unknown", prefix: "JE", filenameLabel: p || "Statement" }; }
 
 /** Initialise the delivery import page each time it's shown. */
 function diInit() {
@@ -3176,7 +3183,7 @@ async function _diUploadFile(file) {
       throw new Error(err.detail || "Failed to parse PDF");
     }
     diParsedData = await resp.json();
-    _diShowStatus(`Detected <strong>${diParsedData.platform === "ubereats" ? "Uber Eats" : "DoorDash"}</strong> statement — ${diParsedData.payouts.length} payout(s) found.`, false);
+    _diShowStatus(`Detected <strong>${diPlatform(diParsedData.platform).label}</strong> statement — ${diParsedData.payouts.length} payout(s) found.`, false);
 
     // Move to mapping step
     await _diShowMappingStep();
@@ -3205,13 +3212,14 @@ async function _diShowMappingStep() {
   const companyId = document.getElementById("di-company").value;
 
   // Set header label
+  const platMeta = diPlatform(platform);
   const label = document.getElementById("di-platform-label");
-  label.textContent = platform === "ubereats" ? "Uber Eats Statement" : "DoorDash Statement";
+  label.textContent = `${platMeta.label} Statement`;
   const info = document.getElementById("di-store-info");
   info.textContent = [diParsedData.store_name, diParsedData.statement_period].filter(Boolean).join(" \u2014 ");
 
   // Set default prefix
-  document.getElementById("di-prefix").value = platform === "ubereats" ? "UBER" : "DD";
+  document.getElementById("di-prefix").value = platMeta.prefix;
 
   // Load saved mapping or defaults
   let mapping = {};
@@ -3233,12 +3241,15 @@ async function _diShowMappingStep() {
   // Define mapping fields based on platform
   const fields = [
     { key: "bank", label: "Bank Account (Net Payout)" },
-    { key: "income", label: `${platform === "ubereats" ? "Uber Eats" : "DoorDash"} Income Account` },
+    { key: "income", label: `${platMeta.label} Income Account` },
     { key: "fees", label: "Platform Fees Account" },
     { key: "marketing", label: "Marketing / Promotions Account" },
-    { key: "chargeback", label: platform === "ubereats" ? "Chargeback Account" : "Error Charges Account" },
-    { key: "adjustments", label: "Adjustments Account" },
   ];
+  // Chargeback/Error column doesn't apply to Grubhub
+  if (platform !== "grubhub") {
+    fields.push({ key: "chargeback", label: platform === "ubereats" ? "Chargeback Account" : "Error Charges Account" });
+  }
+  fields.push({ key: "adjustments", label: "Adjustments Account" });
 
   const selectStyle = "width:100%;padding:8px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--text-sm);background:var(--color-surface);color:var(--color-text);";
 
@@ -3428,7 +3439,7 @@ async function diGeneratePreview() {
 
 /** Display the preview table and enable download. */
 function _diShowPreviewStep(data) {
-  const platform = diParsedData.platform === "ubereats" ? "Uber Eats" : "DoorDash";
+  const platform = diPlatform(diParsedData.platform).label;
   document.getElementById("di-preview-info").textContent =
     `${data.payout_count} payout(s) → ${data.entry_count} journal entry line(s) — ${platform}`;
 
@@ -3471,7 +3482,7 @@ function diDownloadCSV() {
 }
 
 function _diTriggerCsvDownload(csvContent, platform, period) {
-  const platLabel = platform === "ubereats" ? "UberEats" : "DoorDash";
+  const platLabel = diPlatform(platform).filenameLabel;
   const periodLabel = (period || "Statement").replace(/\s+/g, "_");
   const filename = `${platLabel}_JournalEntries_${periodLabel}.csv`;
 
@@ -3580,7 +3591,7 @@ async function diLoadHistory() {
     tbody.innerHTML = "";
     for (const h of history) {
       const date = h.created_at ? new Date(h.created_at + "Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
-      const platform = h.platform === "ubereats" ? "Uber Eats" : h.platform === "doordash" ? "DoorDash" : h.platform;
+      const platform = diPlatform(h.platform).label;
       const companyName = companyMap[h.company_id] || h.company_id;
 
       let statusBadge = "";
