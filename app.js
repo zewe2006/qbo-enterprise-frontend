@@ -3564,6 +3564,10 @@ async function diExportToQBO() {
 
 /* ---- Import History ---- */
 
+// Cache of history rows keyed by id, populated on diLoadHistory and read by diViewHistoryPreview.
+// Avoids embedding store_name/period as string literals in onclick attributes (which breaks on apostrophes).
+let diHistoryById = {};
+
 async function diLoadHistory() {
   const loadingEl = document.getElementById("di-history-loading");
   const emptyEl = document.getElementById("di-history-empty");
@@ -3589,7 +3593,9 @@ async function diLoadHistory() {
     allCompanies.forEach(c => { companyMap[c.id] = c.name; });
 
     tbody.innerHTML = "";
+    diHistoryById = {};
     for (const h of history) {
+      diHistoryById[h.id] = h;
       const date = h.created_at ? new Date(h.created_at + "Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
       const platform = diPlatform(h.platform).label;
       const companyName = companyMap[h.company_id] || h.company_id;
@@ -3618,7 +3624,7 @@ async function diLoadHistory() {
         <td style="text-align:center;">${h.entry_count}</td>
         <td>${statusBadge}${jeInfo}</td>
         <td>
-          <button class="btn btn-ghost btn-sm" onclick="diViewHistoryPreview('${h.id}','${_escHtml(platform)}','${_escHtml(h.store_name || '')}','${_escHtml(h.statement_period || '')}')" title="View Preview" style="padding:4px 8px;">
+          <button class="btn btn-ghost btn-sm" onclick="diViewHistoryPreview('${h.id}')" title="View Preview" style="padding:4px 8px;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </td>
@@ -3639,6 +3645,11 @@ async function diLoadHistory() {
 /** View a past import's journal entries in a preview modal. */
 async function diViewHistoryPreview(historyId, platform, storeName, period) {
   try {
+    // Look up cached row metadata if not passed (new code path), fall back to args (legacy callers)
+    const cached = diHistoryById[historyId] || {};
+    platform = platform || diPlatform(cached.platform).label;
+    storeName = storeName || cached.store_name || "";
+    period = period || cached.statement_period || "";
     const data = await apiGet(`/api/delivery-import/history/${historyId}/csv`);
     if (!data.csv_content) { alert("No data available for this import."); return; }
 
